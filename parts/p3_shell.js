@@ -34,7 +34,7 @@ function renderSignin(app){
   ]));
   card.appendChild(el('div', { 'class': 't-cap', style: 'margin-bottom:4px' }, 'Astar Health Service'));
 
-  if (state.signinMode === 'admin') {
+  if (PORTAL === 'admin') {
     card.appendChild(el('div', { 'class': 't-title', style: 'margin-top:18px' }, 'Admin sign in'));
     card.appendChild(el('p', { 'class': 't-cap' }, 'Enter your 4-digit PIN'));
     var dots = el('div', { 'class': 'pin-dots' });
@@ -52,8 +52,6 @@ function renderSignin(app){
       pad.appendChild(el('button', { 'class': 'pin-key', onclick: function(){ pinInput(k); } }, k));
     });
     card.appendChild(pad);
-    card.appendChild(el('button', { 'class': 'btn btn-ghost btn-sm', style: 'margin-top:22px', onclick: function(){ state.signinMode = 'worker'; state.pin = ''; render(); } },
-      'Support worker? Sign in with email'));
   } else {
     card.appendChild(el('div', { 'class': 't-title', style: 'margin-top:18px;margin-bottom:4px' }, 'Worker sign in'));
     card.appendChild(el('p', { 'class': 't-cap', style: 'margin-bottom:20px' }, 'Use your work email and password'));
@@ -70,8 +68,6 @@ function renderSignin(app){
     form.appendChild(errBox);
     form.appendChild(el('button', { 'class': 'btn btn-pri btn-big btn-block', type: 'submit' }, 'Sign in'));
     card.appendChild(form);
-    card.appendChild(el('button', { 'class': 'btn btn-ghost btn-sm', style: 'margin-top:18px', onclick: function(){ state.signinMode = 'admin'; state.pin = ''; render(); } },
-      'Admin? Sign in with PIN'));
   }
   wrap.appendChild(card);
   app.appendChild(wrap);
@@ -98,7 +94,7 @@ function pinInput(k){
   render();
 }
 document.addEventListener('keydown', function(e){
-  if (state.auth || state.signinMode !== 'admin') return;
+  if (state.auth || PORTAL !== 'admin' || state.pwChange) return;
   if (e.key >= '0' && e.key <= '9') pinInput(e.key);
   else if (e.key === 'Backspace') pinInput('del');
 });
@@ -200,6 +196,7 @@ function renderWorker(app){
     })),
     el('div', { 'class': 'hdr-side' }, [
       state.preview ? el('button', { 'class': 'btn btn-sm btn-dark', onclick: function(){ state.preview = null; state.view = 'home'; render(); } }, '← Admin') : null,
+      (!state.preview && pushSupported() && !pushEnabled()) ? el('button', { 'class': 'iconbtn', title: 'Turn on notifications', style: 'color:var(--acc)', onclick: enablePush }, svgIcon(IC.bell)) : null,
       el('span', { 'class': 'avatar', style: 'background:' + w.colour, title: w.name }, initials(w.name)),
       state.preview ? null : el('button', { 'class': 'iconbtn', title: 'Sign out', onclick: function(){ confirmDlg('Sign out?', 'You can sign back in any time.', 'Sign out', signOut); } }, svgIcon(IC.out))
     ])
@@ -239,6 +236,7 @@ function renderAdmin(app){
       return el('button', { 'class': 'hdr-tab' + (state.adminTab === it.id ? ' on' : ''), onclick: function(){ state.adminTab = it.id; render(); } }, it.label);
     })),
     el('div', { 'class': 'hdr-side' }, [
+      (pushSupported() && !pushEnabled()) ? el('button', { 'class': 'iconbtn', title: 'Turn on notifications', style: 'color:var(--acc)', onclick: enablePush }, svgIcon(IC.bell)) : null,
       workerPreviewSelect(),
       el('button', { 'class': 'iconbtn', title: 'Sign out', onclick: function(){ confirmDlg('Sign out?', 'You can sign back in any time.', 'Sign out', signOut); } }, svgIcon(IC.out))
     ])

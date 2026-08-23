@@ -171,9 +171,12 @@ function viewAdminAvail(main){
         el('div', { style: 'flex:1' }, [ el('b', { style: 'font-size:14px' }, w.name), el('div', { 'class': 't-cap' }, w.email) ]),
         el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(e){
           var b = e.currentTarget;
-          sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Ash',
-            message: firstName(w.name) + ', could you submit your availability for next week (' + fmtDate(nextMon) + ' onwards)? It’s due Saturday. Thanks!', emailed: false }])
-            .then(function(){ b.textContent = 'Nudged ✓'; b.disabled = true; toast('Nudge sent to ' + w.name); refresh(); })
+          var nmsg = firstName(w.name) + ', could you submit your availability for next week (' + fmtDate(nextMon) + ' onwards)? It’s due Saturday. Thanks!';
+          sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Ash', message: nmsg, emailed: false }])
+            .then(function(){
+              sendPush([w.id], 'Availability reminder', nmsg);
+              b.textContent = 'Nudged ✓'; b.disabled = true; toast('Nudge sent to ' + w.name); refresh();
+            })
             ["catch"](function(err){ toast(err.message, true); });
         } }, 'Nudge')
       ]));
@@ -416,7 +419,10 @@ window.addEventListener('resize', (function(){
 
 (function boot(){
   var saved = loadSession();
-  if (saved) state.auth = saved;
+  // only restore a session that belongs to THIS portal
+  if (saved && ((PORTAL === 'admin' && saved.mode === 'admin') || (PORTAL === 'worker' && saved.mode === 'worker'))) {
+    state.auth = saved;
+  }
   render();
   if (state.auth) loadAll().then(render);
 })();

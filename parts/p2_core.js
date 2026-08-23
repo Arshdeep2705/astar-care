@@ -5,6 +5,9 @@ var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 var ADMIN_PIN = '9999';
 var BUCKET = 'ac-files';
 var MAX_FILE = 15 * 1024 * 1024;
+/* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
+var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
+var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
 '**SHIFT SUMMARY (Give a brief summary of things that happened during the shift)**','','',
@@ -211,7 +214,7 @@ function storageDelete(paths){
 /* ================= state ================= */
 var state = {
   auth: null,           // {mode:'admin'} | {mode:'worker', workerId, token, refresh}
-  signinMode: 'worker', // 'worker' | 'admin'
+  signinMode: PORTAL,   // fixed per portal: 'worker' | 'admin'
   pin: '',
   view: 'home',
   adminTab: 'roster',
@@ -301,6 +304,60 @@ function shiftIsToday(s){
   // overnight shift that started yesterday and is still running
   if (s.date === addDays(t, -1) && tMin(s.end_t) <= tMin(s.start_t) && tMin(s.end_t) > 0) return true;
   return false;
+}
+
+/* ================= push notifications ================= */
+function pushSupported(){ return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+function pushEnabled(){
+  return pushSupported() && Notification.permission === 'granted' && localStorage.getItem('ac_push_on') === '1';
+}
+function urlB64ToU8(s){
+  var pad = '='.repeat((4 - s.length % 4) % 4);
+  var b = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+  var raw = atob(b), arr = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function adminIds(){
+  return state.data.workers.filter(function(w){ return w.is_admin; }).map(function(w){ return w.id; });
+}
+function myPushWorkerId(){
+  if (state.auth && state.auth.mode === 'worker') return state.auth.workerId;
+  var a = state.data.workers.find(function(w){ return w.is_admin; });
+  return a ? a.id : null;
+}
+function enablePush(){
+  if (!pushSupported()) {
+    var ios = /iPhone|iPad/.test(navigator.userAgent);
+    toast(ios ? 'On iPhone: first add Astar Care to your Home Screen (Share → Add to Home Screen), then open it from there and try again.'
+              : 'Notifications are not supported in this browser.', true);
+    return Promise.resolve(false);
+  }
+  return Notification.requestPermission().then(function(perm){
+    if (perm !== 'granted') { toast('Notifications were blocked — allow them in your browser settings to get reminders.', true); return false; }
+    return navigator.serviceWorker.register('/sw.js')
+      .then(function(){ return navigator.serviceWorker.ready; })
+      .then(function(reg){
+        return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToU8(VAPID_PUBLIC) });
+      })
+      .then(function(sub){
+        var wid = myPushWorkerId();
+        if (!wid) throw new Error('No worker record for this session.');
+        return sbUpsert('ac_push_subs', [{ worker_id: wid, endpoint: sub.endpoint, sub: sub.toJSON() }], 'endpoint');
+      })
+      .then(function(){
+        localStorage.setItem('ac_push_on', '1');
+        toast('Notifications are on for this device');
+        render();
+        return true;
+      });
+  })["catch"](function(e){ toast('Could not turn on notifications: ' + e.message, true); return false; });
+}
+/* fire-and-forget: never block the action on the notification */
+function sendPush(workerIds, title, body){
+  if (!workerIds || !workerIds.length) return Promise.resolve(null);
+  return sbFetch('/functions/v1/push', { method: 'POST', body: { worker_ids: workerIds, title: title, body: (body || '').slice(0, 240), url: '/' } })
+    ["catch"](function(){ return null; });
 }
 
 /* ================= toasts & confirm ================= */

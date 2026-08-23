@@ -12,22 +12,28 @@ Care-operations web app for **Astar Health Service** — rostering, shift notes,
 node server.js
 ```
 
-Then open http://localhost:8766.
+- Worker portal: http://localhost:8766
+- Admin portal: http://localhost:8766/admin
 
 ## Deploy
 
-Static host — serve `index.html` from the repo root (Render Static Site: build command empty, publish directory `.`).
+Static host — serve the repo root (Render Static Site: build command empty, publish directory `.`). `/` is the worker portal, `/admin/` the admin portal.
 
 ## Layout
 
 | File | What it is |
 |---|---|
-| `index.html` | The whole app |
+| `index.html` | The whole app (worker portal) |
+| `admin/index.html` | Same app served at `/admin` — shows only the admin PIN sign-in |
+| `sw.js` | Service worker for web-push notifications |
+| `manifest.json`, `icon-*.png` | PWA manifest and icons (needed for iPhone notifications) |
 | `server.js` | Tiny local dev server (plain Node http, no deps) |
-| `parts/` | Source sections concatenated into `index.html` (head/CSS, core, shell, worker, notes+incidents, calendar, roster, admin) |
+| `parts/` | Source sections concatenated into `index.html` |
 
-To rebuild `index.html` after editing a part:
+Push notifications are sent by the Supabase Edge Function `push` (VAPID web push); device subscriptions live in `ac_push_subs`.
+
+To rebuild after editing a part:
 
 ```bash
-cat parts/p1_head.html parts/p2_core.js parts/p3_shell.js parts/p4_worker.js parts/p5_note_incident.js parts/p6_calendar.js parts/p7_roster.js parts/p8_admin_rest.js > index.html && printf '</script>\n</body>\n</html>\n' >> index.html
+cat parts/p1_head.html parts/p2_core.js parts/p3_shell.js parts/p4_worker.js parts/p5_note_incident.js parts/p6_calendar.js parts/p7_roster.js parts/p8_admin_rest.js > index.html && printf '</script>\n</body>\n</html>\n' >> index.html && cp index.html admin/index.html
 ```

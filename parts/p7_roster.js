@@ -23,6 +23,17 @@ function reqRows(){
 function shiftFor(reqId, date){
   return state.data.shifts.find(function(s){ return s.req_id === reqId && s.date === date; });
 }
+/* one roster row per client — a client with several requirements (e.g. Tim's
+   day shift + sleepover) gets its chips stacked in the same cell */
+function clientRowGroups(){
+  var groups = [];
+  reqRows().forEach(function(row){
+    var g = groups.find(function(x){ return x.client.id === row.client.id; });
+    if (!g) { g = { client: row.client, reqs: [] }; groups.push(g); }
+    g.reqs.push(row.req);
+  });
+  return groups;
+}
 
 function viewRoster(main){
   var days = rosterDays();
@@ -86,12 +97,13 @@ function viewRoster(main){
       })))
   ]));
 
-  /* grids: one 7-day grid per week */
+  /* grids: one 7-day grid per week, one row per client */
+  var groups = clientRowGroups();
   var mobile = window.innerWidth < 860;
   for (var wk = 0; wk < days.length / 7; wk++) {
     var wkDays = days.slice(wk * 7, wk * 7 + 7);
     if (mobile) main.appendChild(rosterMobileWeek(wkDays, rows, t));
-    else main.appendChild(rosterWeekGrid(wkDays, rows, t));
+    else main.appendChild(rosterWeekGrid(wkDays, groups, t));
   }
 }
 
@@ -102,23 +114,24 @@ function gapCreateShift(row, d){
     ["catch"](function(e){ toast(e.message, true); });
 }
 function rosterChip(s, row, d){
+  var pre = (s ? s.type : row.req.type) === 'sleepover' ? '☾ ' : '';
   if (!s) {
     return el('button', { 'class': 'rw-chip gap', onclick: function(){ gapCreateShift(row, d); } }, [
-      'Needs cover', el('span', { 'class': 'rc-t' }, fmtTime(row.req.start_t) + '–' + fmtTime(row.req.end_t))
+      'Needs cover', el('span', { 'class': 'rc-t' }, pre + fmtTime(row.req.start_t) + '–' + fmtTime(row.req.end_t))
     ]);
   }
   var w = s.worker_id ? workerById(s.worker_id) : null;
   if (w) {
     return el('button', { 'class': 'rw-chip cov', onclick: function(){ openAdminShift(s); } }, [
-      w.name, el('span', { 'class': 'rc-t' }, fmtTime(s.start_t) + '–' + fmtTime(s.end_t))
+      w.name, el('span', { 'class': 'rc-t' }, pre + fmtTime(s.start_t) + '–' + fmtTime(s.end_t))
     ]);
   }
   return el('button', { 'class': 'rw-chip gap', onclick: function(){ openAssign(s); } }, [
-    'Needs cover', el('span', { 'class': 'rc-t' }, fmtTime(s.start_t) + '–' + fmtTime(s.end_t))
+    'Needs cover', el('span', { 'class': 'rc-t' }, pre + fmtTime(s.start_t) + '–' + fmtTime(s.end_t))
   ]);
 }
 
-function rosterWeekGrid(wkDays, rows, t){
+function rosterWeekGrid(wkDays, groups, t){
   var grid = el('div', { 'class': 'rw-grid', style: 'margin-top:14px' });
   var head = el('div', { 'class': 'rw-row rw-hidehead' });
   head.appendChild(el('div', { 'class': 'rw-rowhead' }, el('span', { 'class': 't-label' }, fmtDM(wkDays[0]) + ' – ' + fmtDM(wkDays[6]))));
@@ -126,19 +139,24 @@ function rosterWeekGrid(wkDays, rows, t){
     head.appendChild(el('div', { 'class': 'rw-dayhead' + (d === t ? ' today' : '') }, DOW3[dow(d)] + ' ' + pd(d).getDate()));
   });
   grid.appendChild(head);
-  rows.forEach(function(row){
+  groups.forEach(function(g){
     var tr = el('div', { 'class': 'rw-row' });
     tr.appendChild(el('div', { 'class': 'rw-rowhead' }, [
       el('div', { style: 'display:flex;align-items:center;gap:6px' }, [
-        el('span', { 'class': 'dot', style: 'background:' + row.client.colour }),
-        el('b', { style: 'font-size:13.5px' }, row.client.name)
+        el('span', { 'class': 'dot', style: 'background:' + g.client.colour }),
+        el('b', { style: 'font-size:13.5px' }, g.client.name)
       ]),
-      el('span', { 'class': 't-cap' }, row.req.label)
+      el('span', { 'class': 't-cap' }, g.reqs.map(function(r){ return r.label; }).join(' · '))
     ]));
     wkDays.forEach(function(d){
       var cell = el('div', { 'class': 'rw-cellwrap' });
-      if (row.req.days.indexOf(dow(d)) >= 0) cell.appendChild(rosterChip(shiftFor(row.req.id, d), row, d));
-      else cell.appendChild(el('div', { 'class': 'rw-chip off' }, ''));
+      var any = false;
+      g.reqs.forEach(function(rq){
+        if (rq.days.indexOf(dow(d)) < 0) return;
+        any = true;
+        cell.appendChild(rosterChip(shiftFor(rq.id, d), { client: g.client, req: rq }, d));
+      });
+      if (!any) cell.appendChild(el('div', { 'class': 'rw-chip off' }, ''));
       tr.appendChild(cell);
     });
     grid.appendChild(tr);
@@ -173,7 +191,7 @@ function rosterMobileWeek(wkDays, rows, t){
             el('b', { style: 'color:' + it.row.client.colour }, it.row.client.name),
             ' · ' + (w ? w.name : 'Needs cover')
           ]),
-          el('span', { 'class': 'rc-t', style: 'display:inline' }, fmtTime(st.start_t) + '–' + fmtTime(st.end_t))
+          el('span', { 'class': 'rc-t', style: 'display:inline' }, (st.type === 'sleepover' ? '☾ ' : '') + fmtTime(st.start_t) + '–' + fmtTime(st.end_t))
         ]);
       }))
     ]);
@@ -387,6 +405,7 @@ function openReminder(s, w){
     busyBtn(sendBtn, true);
     var wantEmail = emailChk.checked;
     sbIns('ac_reminders', [{ shift_id: s.id, worker_id: w.id, sent_by: 'Ash', message: msg, emailed: wantEmail }]).then(function(){
+      sendPush([w.id], 'Reminder from Ash', msg);
       if (wantEmail) {
         window.open('mailto:' + encodeURIComponent(w.email) + '?subject=' + encodeURIComponent('Shift note reminder — ' + (c ? c.name : '') + ' ' + fmtDM(s.date)) + '&body=' + encodeURIComponent(msg), '_blank');
       }
@@ -438,7 +457,10 @@ function openSendRoster(){
         el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(e){
           var b = e.currentTarget;
           sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Ash', message: msg, emailed: false }])
-            .then(function(){ b.textContent = 'Sent ✓'; b.disabled = true; toast('Roster sent to ' + w.name); refresh(); })
+            .then(function(){
+              sendPush([w.id], 'Your roster is ready', 'Roster for ' + fmtDate(from) + ' – ' + fmtDate(to) + ' — open Astar Care to see your shifts.');
+              b.textContent = 'Sent ✓'; b.disabled = true; toast('Roster sent to ' + w.name); refresh();
+            })
             ["catch"](function(err){ toast(err.message, true); });
         } }, 'Send in-app'),
         el('a', { 'class': 'btn btn-sm btn-sec', href: 'mailto:' + encodeURIComponent(w.email) + '?subject=' + encodeURIComponent('Your roster ' + fmtDM(from) + ' – ' + fmtDM(to)) + '&body=' + encodeURIComponent(msg), target: '_blank', style: 'text-decoration:none' }, 'Email')

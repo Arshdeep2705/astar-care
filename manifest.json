@@ -1,0 +1,13 @@
+{
+  "name": "Astar Care",
+  "short_name": "Astar Care",
+  "description": "Care operations for Astar Health Service",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f6f3",
+  "theme_color": "#0e7568",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

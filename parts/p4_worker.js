@@ -30,6 +30,21 @@ function viewWorkerHome(main, w){
     ])
   ]));
 
+  /* enable-notifications nudge (once per device) */
+  if (!state.preview && pushSupported() && !pushEnabled() && !localStorage.getItem('ac_push_dismiss')) {
+    main.appendChild(el('div', { 'class': 'section' }, el('div', { 'class': 'banner acc' }, [
+      el('div', { style: 'color:var(--acc);flex:none;margin-top:2px' }, svgIcon(IC.bell)),
+      el('div', { style: 'flex:1;min-width:0' }, [
+        el('b', { style: 'font-size:14px' }, 'Get notified on this phone'),
+        el('div', { 'class': 't-cap', style: 'margin-top:2px' }, 'Reminders and messages from Ash pop up like normal app notifications.'),
+        el('div', { style: 'display:flex;gap:8px;margin-top:10px' }, [
+          el('button', { 'class': 'btn btn-sm btn-pri', onclick: enablePush }, 'Turn on'),
+          el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ localStorage.setItem('ac_push_dismiss', '1'); render(); } }, 'Not now')
+        ])
+      ])
+    ])));
+  }
+
   /* reminders */
   var rems = state.data.reminders.filter(function(r){ return r.worker_id === w.id && !r.acknowledged_at; });
   if (rems.length) {
@@ -329,36 +344,56 @@ function viewAvailability(main, w){
   var nextMon = addDays(mondayOf(todayYmd()), 7);
   main.appendChild(el('div', { style: 'margin:6px 0 4px' }, el('div', { 'class': 't-display' }, 'Availability')));
   main.appendChild(el('p', { 'class': 't-mut', style: 'margin-bottom:20px' },
-    'For the week of ' + fmtDate(nextMon) + ' – ' + fmtDate(addDays(nextMon, 6)) + '. Due each Saturday.'));
+    'For the week of ' + fmtDate(nextMon) + ' – ' + fmtDate(addDays(nextMon, 6)) + '. Submitted once, on Saturdays.'));
 
   var existing = state.data.avail.find(function(a){ return a.worker_id === w.id && a.week_start === nextMon; });
-  var days = {};
-  for (var i = 0; i < 7; i++) {
-    var dnum = String(dow(addDays(nextMon, i)));
-    days[dnum] = existing && existing.days ? !!existing.days[dnum] : false;
-  }
+  var isSat = new Date().getDay() === 6;
+  var canSubmit = isSat && !existing;
+
   var card = el('div', { 'class': 'card card-pad' });
-  var grid = el('div', { style: 'display:flex;flex-direction:column;gap:4px' });
-  for (i = 0; i < 7; i++) (function(i){
-    var d = addDays(nextMon, i);
-    var dnum = String(dow(d));
-    var row = el('label', { 'class': 'checkrow', style: 'padding:11px 8px;border-radius:10px' }, [
-      el('input', { type: 'checkbox', checked: days[dnum], onchange: function(e){ days[dnum] = e.target.checked; } }),
-      el('div', { style: 'flex:1' }, [
-        el('b', { style: 'font-size:14.5px' }, DOW[pd(d).getDay()]),
-        el('span', { 'class': 't-cap t-num', style: 'margin-left:8px' }, fmtDM(d))
-      ])
-    ]);
-    grid.appendChild(row);
-  })(i);
-  card.appendChild(grid);
-  var saveBtn = el('button', { 'class': 'btn btn-pri btn-big btn-block', style: 'margin-top:16px', onclick: function(){
-    busyBtn(saveBtn, true);
-    sbUpsert('ac_availability', [{ worker_id: w.id, week_start: nextMon, days: days, updated_at: new Date().toISOString() }], 'worker_id,week_start')
-      .then(function(){ toast('Availability saved — thanks!'); refresh(); })
-      ["catch"](function(e){ busyBtn(saveBtn, false); toast(e.message, true); });
-  } }, existing ? 'Update availability' : 'Submit availability');
-  card.appendChild(saveBtn);
+  if (canSubmit) {
+    var days = {};
+    for (var i = 0; i < 7; i++) days[String(dow(addDays(nextMon, i)))] = false;
+    var grid = el('div', { style: 'display:flex;flex-direction:column;gap:4px' });
+    for (i = 0; i < 7; i++) (function(i){
+      var d = addDays(nextMon, i);
+      var dnum = String(dow(d));
+      grid.appendChild(el('label', { 'class': 'checkrow', style: 'padding:11px 8px;border-radius:10px' }, [
+        el('input', { type: 'checkbox', checked: days[dnum], onchange: function(e){ days[dnum] = e.target.checked; } }),
+        el('div', { style: 'flex:1' }, [
+          el('b', { style: 'font-size:14.5px' }, DOW[pd(d).getDay()]),
+          el('span', { 'class': 't-cap t-num', style: 'margin-left:8px' }, fmtDM(d))
+        ])
+      ]));
+    })(i);
+    card.appendChild(grid);
+    var saveBtn = el('button', { 'class': 'btn btn-pri btn-big btn-block', style: 'margin-top:16px', onclick: function(){
+      busyBtn(saveBtn, true);
+      sbUpsert('ac_availability', [{ worker_id: w.id, week_start: nextMon, days: days, updated_at: new Date().toISOString() }], 'worker_id,week_start')
+        .then(function(){ toast('Availability submitted — thanks!'); refresh(); })
+        ["catch"](function(e){ busyBtn(saveBtn, false); toast(e.message, true); });
+    } }, 'Submit availability');
+    card.appendChild(el('p', { 'class': 't-cap', style: 'margin-top:12px' }, 'You can submit once — after that, any change goes to Ash as a message below.'));
+    card.appendChild(saveBtn);
+  } else if (existing) {
+    card.appendChild(el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:10px' }, [
+      el('span', { style: 'color:var(--ok);display:flex' }, svgIcon(IC.check)),
+      el('b', { style: 'font-size:14.5px' }, 'Submitted for next week')
+    ]));
+    card.appendChild(el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, Array.apply(null, Array(7)).map(function(_, i){
+      var d = addDays(nextMon, i);
+      var v = existing.days ? existing.days[String(dow(d))] : false;
+      return el('span', { 'class': 'tag ' + (v ? 'tag-ok' : 'tag-mut') }, DOW3[dow(d)]);
+    })));
+    card.appendChild(el('p', { 'class': 't-cap', style: 'margin-top:12px' },
+      'Availability is submitted once a week. Something changed? Send Ash a message below — it lands in the admin inbox and pings Ash straight away.'));
+  } else {
+    card.appendChild(el('div', { 'class': 'empty', style: 'padding:24px 12px' }, [
+      el('div', { 'class': 'e-art' }, '🗓'),
+      el('b', null, 'Opens on Saturday'),
+      'Availability for next week is submitted each Saturday. Anything urgent in the meantime — message Ash below.'
+    ]));
+  }
   main.appendChild(card);
 
   /* urgent change */
@@ -374,7 +409,10 @@ function viewAvailability(main, w){
     if (!msg) { toast('Write a quick message first.', true); return; }
     busyBtn(flagBtn, true);
     sbIns('ac_flags', [{ kind: 'availability', worker_id: w.id, urgent: true, msg: msg }])
-      .then(function(){ ta.value = ''; busyBtn(flagBtn, false); toast('Sent to Ash as urgent'); refresh(); })
+      .then(function(){
+        sendPush(adminIds(), 'Urgent from ' + firstName(w.name), msg);
+        ta.value = ''; busyBtn(flagBtn, false); toast('Sent to Ash as urgent'); refresh();
+      })
       ["catch"](function(e){ busyBtn(flagBtn, false); toast(e.message, true); });
   } }, [svgIcon(IC.send), 'Send urgent change']);
   uc.appendChild(flagBtn);
