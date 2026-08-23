@@ -1,0 +1,15 @@
+{
+  "name": "Astar Care Admin",
+  "short_name": "Astar Admin",
+  "description": "Admin portal for Astar Health Service",
+  "id": "/admin/",
+  "start_url": "/admin/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#14181d",
+  "theme_color": "#14181d",
+  "icons": [
+    { "src": "/icon-admin-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-admin-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

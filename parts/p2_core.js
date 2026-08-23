@@ -265,6 +265,7 @@ function loadAll(){
     D.enums = {};
     (r[12] || []).forEach(function(e){ D.enums[e.name] = e.values; });
     state.loading = false;
+    if (state.auth) startRealtime();
   })["catch"](function(e){
     state.loading = false; state.loadErr = e.message || 'Could not load data';
   });
@@ -304,6 +305,61 @@ function shiftIsToday(s){
   // overnight shift that started yesterday and is still running
   if (s.date === addDays(t, -1) && tMin(s.end_t) <= tMin(s.start_t) && tMin(s.end_t) > 0) return true;
   return false;
+}
+
+/* ================= live updates (Supabase Realtime) ================= */
+/* Any change another device saves shows up here within a second or two.
+   Never refreshes over an open modal or while the user is typing —
+   those refreshes wait until the modal closes / focus leaves the field. */
+var rt = { ws: null, hb: null, timer: null, poll: null, pending: false };
+function liveGuarded(){
+  var ae = document.activeElement;
+  return document.getElementById('ac-modal') || document.getElementById('ac-confirm') ||
+    (ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT' || ae.tagName === 'SELECT'));
+}
+function liveRefresh(){
+  if (!state.auth || state.loading) return;
+  if (liveGuarded()) { rt.pending = true; return; }
+  rt.pending = false;
+  loadAll().then(function(){
+    if (liveGuarded()) { rt.pending = true; return; }
+    render();
+  });
+}
+function scheduleLive(){ clearTimeout(rt.timer); rt.timer = setTimeout(liveRefresh, 700); }
+function startRealtime(){
+  if (!rt.poll) {
+    rt.poll = setInterval(scheduleLive, 60000);  // fallback if the socket ever drops
+    document.addEventListener('visibilitychange', function(){ if (!document.hidden) scheduleLive(); });
+  }
+  if (rt.ws || !window.WebSocket) return;
+  try {
+    var ws = new WebSocket(SB_URL.replace('https://', 'wss://') + '/realtime/v1/websocket?apikey=' + SB_KEY + '&vsn=1.0.0');
+    rt.ws = ws;
+    ws.onopen = function(){
+      ws.send(JSON.stringify({ topic: 'realtime:ac-live', event: 'phx_join', ref: '1',
+        payload: { config: { postgres_changes: [{ event: '*', schema: 'public' }] } } }));
+      rt.hb = setInterval(function(){
+        try { ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', ref: 'hb', payload: {} })); } catch (e) {}
+      }, 25000);
+    };
+    ws.onmessage = function(ev){
+      try {
+        var m = JSON.parse(ev.data);
+        if (m.event === 'postgres_changes') scheduleLive();
+      } catch (e) {}
+    };
+    ws.onclose = function(){
+      clearInterval(rt.hb); rt.ws = null;
+      if (state.auth) setTimeout(startRealtime, 5000);
+    };
+    ws.onerror = function(){ try { ws.close(); } catch (e) {} };
+  } catch (e) { rt.ws = null; }
+}
+function stopRealtime(){
+  rt.pending = false;
+  if (rt.ws) { var w = rt.ws; rt.ws = null; try { w.onclose = null; w.close(); } catch (e) {} }
+  clearInterval(rt.hb);
 }
 
 /* ================= push notifications ================= */
@@ -371,6 +427,7 @@ function closeModal(){
   var m = document.getElementById('ac-modal');
   if (m) m.remove();
   document.body.style.overflow = '';
+  if (rt.pending) scheduleLive();
 }
 function openModal(node, opts){
   closeModal();

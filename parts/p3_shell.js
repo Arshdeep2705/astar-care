@@ -172,6 +172,7 @@ function doSetPassword(form){
 
 function signOut(){
   state.auth = null; state.preview = null; state.pin = ''; state.view = 'home'; state.adminTab = 'roster';
+  stopRealtime();
   clearSession();
   render();
 }

@@ -2,6 +2,7 @@
   "name": "Astar Care",
   "short_name": "Astar Care",
   "description": "Care operations for Astar Health Service",
+  "id": "/",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f7f6f3",

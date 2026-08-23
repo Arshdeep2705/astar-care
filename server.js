@@ -10,14 +10,18 @@ var PORT = 8766;
 var statics = {
   '/sw.js': ['sw.js', 'application/javascript; charset=utf-8'],
   '/manifest.json': ['manifest.json', 'application/manifest+json'],
+  '/admin/manifest.json': ['admin/manifest.json', 'application/manifest+json'],
   '/icon-192.png': ['icon-192.png', 'image/png'],
-  '/icon-512.png': ['icon-512.png', 'image/png']
+  '/icon-512.png': ['icon-512.png', 'image/png'],
+  '/icon-admin-192.png': ['icon-admin-192.png', 'image/png'],
+  '/icon-admin-512.png': ['icon-admin-512.png', 'image/png']
 };
 
 http.createServer(function (req, res) {
   var p = req.url.split('?')[0];
   var entry = statics[p];
-  var file = entry ? path.join(__dirname, entry[0]) : path.join(__dirname, 'index.html');
+  var html = /^\/admin(\/|$)/.test(p) ? 'admin/index.html' : 'index.html';
+  var file = entry ? path.join(__dirname, entry[0]) : path.join(__dirname, html);
   var type = entry ? entry[1] : 'text/html; charset=utf-8';
   fs.readFile(file, function (err, buf) {
     if (err) { res.writeHead(404); res.end('not found'); return; }
