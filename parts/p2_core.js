@@ -404,6 +404,8 @@ function enablePush(){
       .then(function(){
         localStorage.setItem('ac_push_on', '1');
         toast('Notifications are on for this device');
+        // prove it end-to-end: this device gets a confirmation push right away
+        sendPush([myPushWorkerId()], 'Notifications are on', "You'll get Astar Care messages like this on this device.");
         render();
         return true;
       });

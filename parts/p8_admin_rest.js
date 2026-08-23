@@ -163,7 +163,23 @@ function viewAdminAvail(main){
   });
   if (missing.length) {
     var sec = el('div', { 'class': 'section' });
-    sec.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, "Haven't submitted"));
+    var nudgeAll = el('button', { 'class': 'btn btn-sm btn-dark', onclick: function(){
+      nudgeAll.disabled = true; nudgeAll.textContent = 'Nudging…';
+      var chain = Promise.resolve();
+      missing.forEach(function(w){
+        var nmsg = firstName(w.name) + ', could you submit your availability for next week (' + fmtDate(nextMon) + ' onwards)? It’s due Saturday. Thanks!';
+        chain = chain.then(function(){
+          return sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Ash', message: nmsg, emailed: false }])
+            .then(function(){ sendPush([w.id], 'Availability reminder', nmsg); });
+        });
+      });
+      chain.then(function(){ toast('Nudged all ' + missing.length); refresh(); })
+        ["catch"](function(e){ toast(e.message, true); refresh(); });
+    } }, [svgIcon(IC.bell), 'Nudge everyone (' + missing.length + ')']);
+    sec.appendChild(el('div', { 'class': 'section-head', style: 'margin-bottom:10px' }, [
+      el('div', { 'class': 't-label' }, "Haven't submitted"),
+      nudgeAll
+    ]));
     var box = el('div', { 'class': 'card', style: 'padding:4px 16px' });
     missing.forEach(function(w){
       box.appendChild(el('div', { 'class': 'rowline' }, [

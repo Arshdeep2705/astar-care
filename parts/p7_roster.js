@@ -40,6 +40,21 @@ function viewRoster(main){
   var rows = reqRows();
   var t = todayYmd();
 
+  /* make sure the admin actually turns notifications on — the bell alone is easy to miss */
+  if (pushSupported() && !pushEnabled() && !localStorage.getItem('ac_push_dismiss_admin')) {
+    main.appendChild(el('div', { 'class': 'banner acc', style: 'margin:6px 0 18px' }, [
+      el('div', { style: 'color:var(--acc);flex:none;margin-top:2px' }, svgIcon(IC.bell)),
+      el('div', { style: 'flex:1;min-width:0' }, [
+        el('b', { style: 'font-size:14px' }, 'Get notified when workers message you'),
+        el('div', { 'class': 't-cap', style: 'margin-top:2px' }, 'Urgent messages and availability changes pop up on this device like normal app notifications. You get a test notification straight away.'),
+        el('div', { style: 'display:flex;gap:8px;margin-top:10px' }, [
+          el('button', { 'class': 'btn btn-sm btn-pri', onclick: enablePush }, 'Turn on'),
+          el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ localStorage.setItem('ac_push_dismiss_admin', '1'); render(); } }, 'Not now')
+        ])
+      ])
+    ]));
+  }
+
   /* stats across visible range */
   var total = 0, covered = 0, hoursReq = 0, hoursFill = 0;
   rows.forEach(function(row){
