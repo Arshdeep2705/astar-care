@@ -145,7 +145,7 @@ function viewAdminAvail(main){
       var row = el('div', { style: 'padding:12px 16px;border-bottom:1px solid var(--line)' }, [
         el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px' }, [
           el('span', { 'class': 'dot', style: 'background:' + w.colour }), el('b', { style: 'font-size:14px' }, w.name),
-          !a ? el('span', { 'class': 'tag tag-warn', style: 'margin-left:auto' }, 'Not in') : null
+          !a ? el('span', { 'class': 'tag tag-warn', style: 'margin-left:auto' }, 'Not submitted') : null
         ]),
         a ? el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, Array.apply(null, Array(7)).map(function(_, i){
           var d = addDays(nextMon, i); var v = a.days ? a.days[String(dow(d))] : false;
@@ -163,19 +163,25 @@ function viewAdminAvail(main){
   });
   if (missing.length) {
     var sec = el('div', { 'class': 'section' });
-    var nudgeAll = el('button', { 'class': 'btn btn-sm btn-dark', onclick: function(){
+    /* nudge state lives in ui so a mid-chain live refresh can't re-enable the
+       buttons and let the admin double-send */
+    ui.nudged = ui.nudged || {};
+    var nudgeAll = el('button', { 'class': 'btn btn-sm btn-dark', disabled: !!ui.nudging, onclick: function(){
+      if (ui.nudging) return;
+      ui.nudging = true;
       nudgeAll.disabled = true; nudgeAll.textContent = 'Nudging…';
       var chain = Promise.resolve();
       missing.forEach(function(w){
-        var nmsg = firstName(w.name) + ', could you submit your availability for next week (' + fmtDate(nextMon) + ' onwards)? It’s due Saturday. Thanks!';
+        var nmsg = firstName(w.name) + ', availability for next week (' + fmtDate(nextMon) + ' onwards) opens this Saturday — please submit it then. Thanks!';
         chain = chain.then(function(){
-          return sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Ash', message: nmsg, emailed: false }])
-            .then(function(){ sendPush([w.id], 'Availability reminder', nmsg); });
+          if (ui.nudged[w.id]) return null;
+          return sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Office', message: nmsg, emailed: false }])
+            .then(function(){ ui.nudged[w.id] = true; sendPush([w.id], 'Availability reminder', nmsg); });
         });
       });
-      chain.then(function(){ toast('Nudged all ' + missing.length); refresh(); })
-        ["catch"](function(e){ toast(e.message, true); refresh(); });
-    } }, [svgIcon(IC.bell), 'Nudge everyone (' + missing.length + ')']);
+      chain.then(function(){ ui.nudging = false; toast('Nudged ' + missing.length + (missing.length === 1 ? ' worker' : ' workers')); refresh(); })
+        ["catch"](function(e){ ui.nudging = false; toast(e.message, true); refresh(); });
+    } }, [svgIcon(IC.bell), ui.nudging ? 'Nudging…' : 'Nudge everyone (' + missing.length + ')']);
     sec.appendChild(el('div', { 'class': 'section-head', style: 'margin-bottom:10px' }, [
       el('div', { 'class': 't-label' }, "Haven't submitted"),
       nudgeAll
@@ -185,16 +191,19 @@ function viewAdminAvail(main){
       box.appendChild(el('div', { 'class': 'rowline' }, [
         el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),
         el('div', { style: 'flex:1' }, [ el('b', { style: 'font-size:14px' }, w.name), el('div', { 'class': 't-cap' }, w.email) ]),
-        el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(e){
+        el('button', { 'class': 'btn btn-sm btn-sec', disabled: !!ui.nudged[w.id], onclick: function(e){
+          if (ui.nudged[w.id]) return;
           var b = e.currentTarget;
-          var nmsg = firstName(w.name) + ', could you submit your availability for next week (' + fmtDate(nextMon) + ' onwards)? It’s due Saturday. Thanks!';
-          sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Ash', message: nmsg, emailed: false }])
+          b.disabled = true;
+          var nmsg = firstName(w.name) + ', availability for next week (' + fmtDate(nextMon) + ' onwards) opens this Saturday — please submit it then. Thanks!';
+          sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Office', message: nmsg, emailed: false }])
             .then(function(){
+              ui.nudged[w.id] = true;
               sendPush([w.id], 'Availability reminder', nmsg);
-              b.textContent = 'Nudged ✓'; b.disabled = true; toast('Nudge sent to ' + w.name); refresh();
+              b.textContent = 'Nudged ✓'; toast('Nudge sent to ' + w.name); refresh();
             })
-            ["catch"](function(err){ toast(err.message, true); });
-        } }, 'Nudge')
+            ["catch"](function(err){ b.disabled = false; toast(err.message, true); });
+        } }, ui.nudged[w.id] ? 'Nudged ✓' : 'Nudge')
       ]));
     });
     sec.appendChild(box);

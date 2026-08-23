@@ -65,8 +65,58 @@ function uploadPending(prefix, pending){
 }
 
 /* ================= THE SHIFT NOTE ================= */
-/* opts: {shift, worker, note?} — note present = editing */
+/* an existing note opens as a clean formatted page first (bold headings, no
+   asterisks); Edit switches to the plain one-box editor */
+function openNoteRead(opts){
+  var note = opts.note;
+  var shift = opts.shift || (note.shift_id ? shiftById(note.shift_id) : null);
+  var client = clientById(note.participant_id);
+  var author = workerById(note.worker_id);
+  var atts = note.attachments || [];
+  var body = el('div', { 'class': 'modal-body' });
+  body.appendChild(renderNoteBody(note.body));
+  if (atts.length) {
+    body.appendChild(el('div', { 'class': 't-label', style: 'margin:18px 0 6px' }, 'Attachments'));
+    var list = el('div', { 'class': 'filelist' });
+    atts.forEach(function(a){
+      list.appendChild(el('div', { 'class': 'filerow' }, [
+        el('span', { style: 'display:flex;color:var(--dim)' }, svgIcon(IC.file)),
+        el('span', { 'class': 'fname', onclick: function(){
+          storageSignedUrl(a.path).then(function(url){ window.open(url, '_blank'); })["catch"](function(){ toast('Could not open the file.', true); });
+        } }, a.name),
+        el('span', { 'class': 't-cap t-num' }, Math.round((a.size || 0) / 1024) + ' KB')
+      ]));
+    });
+    body.appendChild(list);
+  }
+  var m = el('div', { 'class': 'modal modal-wide' }, [
+    el('div', { 'class': 'sheet-grab' }),
+    el('div', { 'class': 'modal-head' }, [
+      el('div', null, [
+        el('div', { 'class': 't-title' }, note.note_type),
+        el('div', { 'class': 't-cap' }, [
+          client ? client.name : '', author ? ' · ' + author.name : '',
+          shift ? ' · ' + fmtDate(shift.date) : ' · ' + fmtDT(note.created_at)
+        ].join(''))
+      ]),
+      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+    ]),
+    body,
+    el('div', { 'class': 'modal-foot' }, [
+      el('div', { 'class': 'spacer' }),
+      el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Close'),
+      el('button', { 'class': 'btn btn-pri', onclick: function(){
+        var o = { note: opts.note, shift: shift, worker: opts.worker, edit: true };
+        openNoteModal(o);
+      } }, [svgIcon(IC.edit), 'Edit'])
+    ])
+  ]);
+  openModal(m);
+}
+
+/* opts: {shift, worker, note?, edit?} — note without edit = read view first */
 function openNoteModal(opts){
+  if (opts.note && !opts.edit) { openNoteRead(opts); return; }
   var shift = opts.shift || (opts.note && opts.note.shift_id ? shiftById(opts.note.shift_id) : null);
   var note = opts.note || null;
   var worker = opts.worker || me();
@@ -82,7 +132,7 @@ function openNoteModal(opts){
     typeSel.appendChild(el('option', { value: nt, selected: (note ? note.note_type : 'Progress Notes') === nt }, nt));
   });
   var ta = el('textarea', { 'class': 'ta', rows: '18', placeholder: 'Type to answer...' });
-  ta.value = note ? note.body : (typeSel.value === 'Progress Notes' ? NOTE_TEMPLATE : '');
+  ta.value = note ? note.body.replace(/\*\*/g, '') : (typeSel.value === 'Progress Notes' ? NOTE_TEMPLATE : '');
   ta.addEventListener('input', function(){ typed = true; });
   typeSel.addEventListener('change', function(){
     // only swap template if the worker hasn't typed anything yet

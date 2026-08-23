@@ -98,7 +98,7 @@ function viewWorkerHome(main, w){
     secT.appendChild(el('div', { 'class': 'card empty' }, [
       el('div', { 'class': 'e-art' }, '☕'),
       el('b', null, 'Nothing on today'),
-      'Enjoy the day off — your next shifts are below.'
+      'Enjoy the day off.'
     ]));
   } else {
     todays.forEach(function(s){ secT.appendChild(shiftCard(s, w, { clock: true })); });
@@ -115,7 +115,7 @@ function viewWorkerHome(main, w){
     secU.appendChild(el('div', { 'class': 'card empty' }, [
       el('div', { 'class': 'e-art' }, '—'),
       el('b', null, 'No upcoming shifts yet'),
-      'Next week’s roster is still being built.'
+      'When you’re rostered on, shifts appear here.'
     ]));
   } else {
     var list = el('div', { 'class': 'card', style: 'padding:4px 16px' });
@@ -147,7 +147,7 @@ function pickShiftThen(w, what){
       if (at === 1) return a.date < b.date ? 1 : -1;
       return a.date < b.date ? -1 : 1;
     });
-  if (!mine.length) { toast('No shifts of yours in the last month.', true); return; }
+  if (!mine.length) { toast('No recent or upcoming shifts to pick from.', true); return; }
   var m = el('div', { 'class': 'modal', style: 'max-width:440px' }, [
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
@@ -225,7 +225,7 @@ function shiftCard(s, w, opts){
           el('b', { style: 'font-size:13.5px' }, n.note_type),
           el('div', { 'class': 't-cap', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, notePreview(n.body))
         ]),
-        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Edit')
+        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Open')
       ]));
     });
     incidents.forEach(function(ir){
@@ -235,7 +235,7 @@ function shiftCard(s, w, opts){
           el('b', { style: 'font-size:13.5px' }, 'Incident report'),
           el('div', { 'class': 't-cap', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, ir.ticket_desc || '(no description)')
         ]),
-        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Edit')
+        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Open')
       ]));
     });
     card.appendChild(att);
@@ -248,9 +248,9 @@ function notePreview(body){
   var lines = (body || '').split('\n');
   for (var i = 0; i < lines.length; i++) {
     var L = lines[i].trim();
-    if (L && L.slice(0,2) !== '**') return L;
+    if (L && !isNoteHeading(L)) return L.replace(/\*\*/g, '');
   }
-  return (lines[0] || '').replace(/\*\*/g, '').slice(0, 80);
+  return 'Open to read';
 }
 
 function clockBtn(s, w, kind){
@@ -333,7 +333,7 @@ function viewMyNotes(main, w){
         el('div', { 'class': 't-cap', style: 'margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
           item.kind === 'note' ? notePreview(rec.body) : (rec.ticket_desc || ''))
       ]),
-      el('span', { 'class': 't-cap', style: 'flex:none;margin-top:3px' }, 'Edit')
+      el('span', { 'class': 't-cap', style: 'flex:none;margin-top:3px' }, 'Open')
     ]));
   });
   main.appendChild(list);
@@ -352,8 +352,12 @@ function viewAvailability(main, w){
 
   var card = el('div', { 'class': 'card card-pad' });
   if (canSubmit) {
-    var days = {};
-    for (var i = 0; i < 7; i++) days[String(dow(addDays(nextMon, i)))] = false;
+    // draft lives in ui so a live background refresh can't wipe ticked days
+    if (!ui.avail || ui.avail.week !== nextMon) {
+      ui.avail = { week: nextMon, days: {} };
+      for (var i = 0; i < 7; i++) ui.avail.days[String(dow(addDays(nextMon, i)))] = false;
+    }
+    var days = ui.avail.days;
     var grid = el('div', { style: 'display:flex;flex-direction:column;gap:4px' });
     for (i = 0; i < 7; i++) (function(i){
       var d = addDays(nextMon, i);
@@ -370,7 +374,7 @@ function viewAvailability(main, w){
     var saveBtn = el('button', { 'class': 'btn btn-pri btn-big btn-block', style: 'margin-top:16px', onclick: function(){
       busyBtn(saveBtn, true);
       sbUpsert('ac_availability', [{ worker_id: w.id, week_start: nextMon, days: days, updated_at: new Date().toISOString() }], 'worker_id,week_start')
-        .then(function(){ toast('Availability submitted — thanks!'); refresh(); })
+        .then(function(){ ui.avail = null; toast('Availability submitted — thanks!'); refresh(); })
         ["catch"](function(e){ busyBtn(saveBtn, false); toast(e.message, true); });
     } }, 'Submit availability');
     card.appendChild(el('p', { 'class': 't-cap', style: 'margin-top:12px' }, 'You can submit once — after that, any change goes to the office as a message below.'));
@@ -386,7 +390,7 @@ function viewAvailability(main, w){
       return el('span', { 'class': 'tag ' + (v ? 'tag-ok' : 'tag-mut') }, DOW3[dow(d)]);
     })));
     card.appendChild(el('p', { 'class': 't-cap', style: 'margin-top:12px' },
-      'Availability is submitted once a week. Something changed? Send a message below — it goes straight to the office.'));
+      'Availability is submitted once, each Saturday. Something changed? Send a message below — it goes straight to the office.'));
   } else {
     card.appendChild(el('div', { 'class': 'empty', style: 'padding:24px 12px' }, [
       el('div', { 'class': 'e-art' }, '🗓'),
@@ -402,7 +406,8 @@ function viewAvailability(main, w){
   var uc = el('div', { 'class': 'card card-pad' });
   uc.appendChild(el('p', { 'class': 't-mut', style: 'font-size:14px;margin-bottom:12px' },
     "If your availability has changed at short notice, send an urgent message — it goes straight to the office."));
-  var ta = el('textarea', { 'class': 'ta', rows: '3', placeholder: "e.g. I can't do Thursday any more — sorry!" });
+  var ta = el('textarea', { 'class': 'ta', rows: '3', placeholder: "e.g. I can't do Thursday any more — sorry!",
+    value: ui.urgentMsg || '', oninput: function(e){ ui.urgentMsg = e.target.value; } });
   uc.appendChild(ta);
   var flagBtn = el('button', { 'class': 'btn btn-dark', style: 'margin-top:12px', onclick: function(){
     var msg = ta.value.trim();
@@ -411,7 +416,7 @@ function viewAvailability(main, w){
     sbIns('ac_flags', [{ kind: 'availability', worker_id: w.id, urgent: true, msg: msg }])
       .then(function(){
         sendPush(adminIds(), 'Urgent from ' + firstName(w.name), msg);
-        ta.value = ''; busyBtn(flagBtn, false); toast('Sent as urgent'); refresh();
+        ui.urgentMsg = ''; ta.value = ''; busyBtn(flagBtn, false); toast('Sent as urgent'); refresh();
       })
       ["catch"](function(e){ busyBtn(flagBtn, false); toast(e.message, true); });
   } }, [svgIcon(IC.send), 'Send urgent change']);

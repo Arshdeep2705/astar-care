@@ -122,16 +122,19 @@ function viewRoster(main){
   }
 }
 
-function gapCreateShift(row, d){
+function gapCreateShift(row, d, btn){
+  if (btn) btn.disabled = true;   // guard against a double-tap creating two shifts
+  var dup = shiftFor(row.req.id, d);
+  if (dup) { openAssign(dup); return; }
   sbIns('ac_shifts', [{ client_id: row.client.id, req_id: row.req.id, date: d,
     start_t: row.req.start_t, end_t: row.req.end_t, type: row.req.type }])
     .then(function(rows){ state.data.shifts.push(rows[0]); openAssign(rows[0]); })
-    ["catch"](function(e){ toast(e.message, true); });
+    ["catch"](function(e){ if (btn) btn.disabled = false; toast(e.message, true); });
 }
 function rosterChip(s, row, d){
   var pre = (s ? s.type : row.req.type) === 'sleepover' ? '☾ ' : '';
   if (!s) {
-    return el('button', { 'class': 'rw-chip gap', onclick: function(){ gapCreateShift(row, d); } }, [
+    return el('button', { 'class': 'rw-chip gap', onclick: function(e){ gapCreateShift(row, d, e.currentTarget); } }, [
       'Needs cover', el('span', { 'class': 'rc-t' }, pre + fmtTime(row.req.start_t) + '–' + fmtTime(row.req.end_t))
     ]);
   }
@@ -254,10 +257,13 @@ function openAssign(s){
       el('div', { 'class': 't-cap', style: 'margin-bottom:10px' }, 'Ranked by submitted availability for that day.'),
       el('div', { style: 'display:flex;flex-direction:column;gap:8px' }, cands.map(function(cd){
         return el('button', { 'class': 'listnote', style: 'display:flex;align-items:center;gap:10px;width:100%;text-align:left', onclick: function(){
-          if (cd.busy && !confirm(cd.w.name + ' already has an overlapping shift that day. Assign anyway?')) return;
-          sbUpd('ac_shifts', 'id=eq.' + s.id, { worker_id: cd.w.id }).then(function(){
-            closeModal(); toast(cd.w.name + ' assigned to ' + (c ? c.name : '')); refresh();
-          })["catch"](function(e){ toast(e.message, true); });
+          function doAssign(){
+            sbUpd('ac_shifts', 'id=eq.' + s.id, { worker_id: cd.w.id }).then(function(){
+              closeModal(); toast(cd.w.name + ' assigned to ' + (c ? c.name : '')); refresh();
+            })["catch"](function(e){ toast(e.message, true); });
+          }
+          if (cd.busy) confirmDlg('Double booking', cd.w.name + ' already has an overlapping shift that day. Assign anyway?', 'Assign anyway', doAssign, true);
+          else doAssign();
         } }, [
           el('span', { 'class': 'avatar', style: 'background:' + cd.w.colour }, initials(cd.w.name)),
           el('div', { style: 'flex:1' }, [
@@ -376,7 +382,7 @@ function openAdminShift(s){
       el('div', { 'class': 'spacer' }),
       el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ openNoteModal({ shift: s, worker: w || me() }); } }, 'Add note'),
       needsReminder ? el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ openReminder(s, w); } }, [svgIcon(IC.bell), 'Send reminder']) : null,
-      el('button', { 'class': 'btn btn-dark btn-sm', onclick: function(){ openEditRoster(s); } }, 'Edit roster')
+      el('button', { 'class': 'btn btn-dark btn-sm', onclick: function(){ openEditRoster(s); } }, 'Edit shift')
     ])
   ]);
   openModal(m);
@@ -387,7 +393,7 @@ function openEditRoster(s){
   var m = el('div', { 'class': 'modal', style: 'max-width:420px' }, [
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
-      el('div', { 'class': 't-title' }, 'Edit roster'),
+      el('div', { 'class': 't-title' }, 'Edit shift'),
       el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
@@ -419,7 +425,7 @@ function openReminder(s, w){
     if (!msg) { toast('The message is empty.', true); return; }
     busyBtn(sendBtn, true);
     var wantEmail = emailChk.checked;
-    sbIns('ac_reminders', [{ shift_id: s.id, worker_id: w.id, sent_by: 'Ash', message: msg, emailed: wantEmail }]).then(function(){
+    sbIns('ac_reminders', [{ shift_id: s.id, worker_id: w.id, sent_by: 'Office', message: msg, emailed: wantEmail }]).then(function(){
       sendPush([w.id], 'Astar Care reminder', msg);
       if (wantEmail) {
         window.open('mailto:' + encodeURIComponent(w.email) + '?subject=' + encodeURIComponent('Shift note reminder — ' + (c ? c.name : '') + ' ' + fmtDM(s.date)) + '&body=' + encodeURIComponent(msg), '_blank');
@@ -435,7 +441,7 @@ function openReminder(s, w){
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('div', { 'class': 'field' }, [ el('label', null, 'Message'), ta,
-        el('div', { 'class': 'hint' }, 'They see it as a banner on their home screen with “Add the note” and “Got it”.') ]),
+        el('div', { 'class': 'hint' }, 'They see it as a banner on their Home tab in the app, with “Add the note” and “Got it”.') ]),
       el('label', { 'class': 'checkrow' }, [ emailChk, el('span', { style: 'font-size:14px' }, 'Also open an email to ' + w.email) ])
     ]),
     el('div', { 'class': 'modal-foot' }, [ el('div', { 'class': 'spacer' }),
@@ -471,7 +477,7 @@ function openSendRoster(){
       el('div', { style: 'display:flex;gap:8px;margin-top:10px' }, [
         el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(e){
           var b = e.currentTarget;
-          sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Ash', message: msg, emailed: false }])
+          sbIns('ac_reminders', [{ shift_id: null, worker_id: w.id, sent_by: 'Office', message: msg, emailed: false }])
             .then(function(){
               sendPush([w.id], 'Your roster is ready', 'Roster for ' + fmtDate(from) + ' – ' + fmtDate(to) + ' — open Astar Care to see your shifts.');
               b.textContent = 'Sent ✓'; b.disabled = true; toast('Roster sent to ' + w.name); refresh();

@@ -10,6 +10,7 @@ var PORT = 8766;
 var statics = {
   '/sw.js': ['sw.js', 'application/javascript; charset=utf-8'],
   '/manifest.json': ['manifest.json', 'application/manifest+json'],
+  '/version.json': ['version.json', 'application/json'],
   '/admin/manifest.json': ['admin/manifest.json', 'application/manifest+json'],
   '/icon-192.png': ['icon-192.png', 'image/png'],
   '/icon-512.png': ['icon-512.png', 'image/png'],

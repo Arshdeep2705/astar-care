@@ -7,21 +7,48 @@ var BUCKET = 'ac-files';
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
+var BUILD_V = '__BUILD__';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
-'**SHIFT SUMMARY (Give a brief summary of things that happened during the shift)**','','',
-'**APPOINTMENTS (List any appointments attended during the shift, times, who the appointment was with, what it was for, and the support you provided during the appointment)**','','',
-'**COMMUNITY ACTIVITIES (List any community activities the participant attended during the shift including what the activity was, the location and the times, and the support you provided during the activity)**','','',
-'**CHALLENGING BEHAVIOURS (Please note any challenging behaviours the Participant displayed during the shift. Include triggers and the responses you provided)**','','',
-'**MEDICATION (Note all medications the Participant took during the shift. Include the times taken, if ingestion was witnessed)**','','',
-"**Medication Refusal (Did the Participant refuse medication at all during this shift. If 'yes', please note what medication was refused and any details. If 'no' please just write no)**",'','',
-'**FOOD INTAKE (List any food the Participant ate during the shift and approx. times)**','','',
-'**PERSONAL CARE (Note any personal care activities the Participant was supported with during the shift)**','','',
-"**FOR ACTIVE NIGHTS ONLY (What time did the participant go to sleep, details of any support needed during night and any other observations. If this shift was not active night write 'no')**",'','',
-'**WERE THERE ANY INCIDENTS DURING THE SHIFT (Provide a brief summary and complete an incident report within 24 hours)**','','',
-'**ADDITIONAL NOTES**','',''
+'SHIFT SUMMARY (Give a brief summary of things that happened during the shift)','','',
+'APPOINTMENTS (List any appointments attended during the shift, times, who the appointment was with, what it was for, and the support you provided during the appointment)','','',
+'COMMUNITY ACTIVITIES (List any community activities the participant attended during the shift including what the activity was, the location and the times, and the support you provided during the activity)','','',
+'CHALLENGING BEHAVIOURS (Please note any challenging behaviours the Participant displayed during the shift. Include triggers and the responses you provided)','','',
+'MEDICATION (Note all medications the Participant took during the shift. Include the times taken, if ingestion was witnessed)','','',
+"MEDICATION REFUSAL (Did the Participant refuse medication at all during this shift. If 'yes', please note what medication was refused and any details. If 'no' please just write no)",'','',
+'FOOD INTAKE (List any food the Participant ate during the shift and approx. times)','','',
+'PERSONAL CARE (Note any personal care activities the Participant was supported with during the shift)','','',
+"FOR ACTIVE NIGHTS ONLY (What time did the participant go to sleep, details of any support needed during night and any other observations. If this shift was not active night write 'no')",'','',
+'WERE THERE ANY INCIDENTS DURING THE SHIFT (Provide a brief summary and complete an incident report within 24 hours)','','',
+'ADDITIONAL NOTES','',''
 ].join('\n');
+
+/* the fixed section headings — used to bold them in the formatted read view */
+var NOTE_HEADS = ['MEDICATION REFUSAL','SHIFT SUMMARY','APPOINTMENTS','COMMUNITY ACTIVITIES',
+  'CHALLENGING BEHAVIOURS','MEDICATION','FOOD INTAKE','PERSONAL CARE','FOR ACTIVE NIGHTS ONLY',
+  'WERE THERE ANY INCIDENTS','ADDITIONAL NOTES'];
+function isNoteHeading(rawLine){
+  var t = rawLine.trim();
+  if (!t) return false;
+  if (/^\*\*.*\*\*$/.test(t)) return true;               // legacy starred headings
+  var up = t.replace(/\*\*/g, '').toUpperCase();
+  return NOTE_HEADS.some(function(h){ return up.indexOf(h) === 0; });
+}
+/* bold headings, clean paragraphs — no asterisks, like a properly set page */
+function renderNoteBody(body){
+  var box = el('div', { 'class': 'note-read' });
+  var para = [];
+  function flush(){ if (para.length) { box.appendChild(el('p', null, para.join('\n'))); para = []; } }
+  (body || '').split('\n').forEach(function(raw){
+    var line = raw.replace(/\*\*/g, '').trim();
+    if (!line) { flush(); return; }
+    if (isNoteHeading(raw)) { flush(); box.appendChild(el('div', { 'class': 'nr-h' }, line)); }
+    else para.push(line);
+  });
+  flush();
+  return box;
+}
 
 var NOTE_TYPES = ['Progress Notes','Enquiry','Feedback','Incident','Injury','Mileage'];
 
@@ -229,17 +256,34 @@ var state = {
 };
 var ui = {};            // scratch for modal state
 
+/* sessions are stored per portal so /admin and / never sign each other out */
 function saveSession(){
-  try { localStorage.setItem('ac_session', JSON.stringify(state.auth)); } catch(e){}
+  try { localStorage.setItem('ac_session_' + PORTAL, JSON.stringify(state.auth)); } catch(e){}
 }
 function loadSession(){
-  try { var s = localStorage.getItem('ac_session'); return s ? JSON.parse(s) : null; } catch(e){ return null; }
+  try {
+    var s = localStorage.getItem('ac_session_' + PORTAL);
+    if (!s) {
+      // migrate a session saved under the old shared key
+      var old = localStorage.getItem('ac_session');
+      if (old) {
+        var p = JSON.parse(old);
+        if ((PORTAL === 'admin') === (p.mode === 'admin')) { localStorage.removeItem('ac_session'); return p; }
+      }
+      return null;
+    }
+    return JSON.parse(s);
+  } catch(e){ return null; }
 }
-function clearSession(){ try { localStorage.removeItem('ac_session'); } catch(e){} }
+function clearSession(){ try { localStorage.removeItem('ac_session_' + PORTAL); localStorage.removeItem('ac_session'); } catch(e){} }
 
 /* ================= data loading ================= */
 function loadAll(){
-  state.loading = true; state.loadErr = null;
+  // only the FIRST load may show the skeleton / error screen — background
+  // refreshes keep the current view and fail silently (data stays)
+  var initial = !state.data.workers.length;
+  if (initial) state.loading = true;
+  state.loadErr = null;
   var D = state.data;
   if (!state.win) state.win = { from: addDays(mondayOf(todayYmd()), -182), to: addDays(mondayOf(todayYmd()), 182) };
   var from = state.win.from, to = state.win.to;
@@ -267,7 +311,8 @@ function loadAll(){
     state.loading = false;
     if (state.auth) startRealtime();
   })["catch"](function(e){
-    state.loading = false; state.loadErr = e.message || 'Could not load data';
+    state.loading = false;
+    if (initial) state.loadErr = e.message || 'Could not load data';
   });
 }
 function refresh(){ return loadAll().then(render); }
@@ -327,10 +372,28 @@ function liveRefresh(){
   });
 }
 function scheduleLive(){ clearTimeout(rt.timer); rt.timer = setTimeout(liveRefresh, 700); }
+/* installed home-screen apps cache the page — reload automatically when a new
+   build is deployed (never mid-modal or mid-typing; waits until it's safe) */
+function checkVersion(){
+  fetch('/version.json?_=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if (j && j.v && String(j.v) !== BUILD_V) {
+        if (liveGuarded()) { rt.upd = true; return; }
+        location.reload();
+      }
+    })["catch"](function(){});
+}
 function startRealtime(){
   if (!rt.poll) {
     rt.poll = setInterval(scheduleLive, 60000);  // fallback if the socket ever drops
-    document.addEventListener('visibilitychange', function(){ if (!document.hidden) scheduleLive(); });
+    setInterval(checkVersion, 300000);
+    document.addEventListener('visibilitychange', function(){ if (!document.hidden) { scheduleLive(); checkVersion(); } });
+    // a refresh deferred because a field had focus runs as soon as focus leaves it
+    document.addEventListener('focusout', function(){
+      setTimeout(function(){ if (rt.pending && !liveGuarded()) scheduleLive(); }, 50);
+    });
+    checkVersion();
   }
   if (rt.ws || !window.WebSocket) return;
   try {
@@ -365,7 +428,7 @@ function stopRealtime(){
 /* ================= push notifications ================= */
 function pushSupported(){ return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
 function pushEnabled(){
-  return pushSupported() && Notification.permission === 'granted' && localStorage.getItem('ac_push_on') === '1';
+  return pushSupported() && Notification.permission === 'granted' && localStorage.getItem('ac_push_on_' + PORTAL) === '1';
 }
 function urlB64ToU8(s){
   var pad = '='.repeat((4 - s.length % 4) % 4);
@@ -399,10 +462,12 @@ function enablePush(){
       .then(function(sub){
         var wid = myPushWorkerId();
         if (!wid) throw new Error('No worker record for this session.');
-        return sbUpsert('ac_push_subs', [{ worker_id: wid, endpoint: sub.endpoint, sub: sub.toJSON() }], 'endpoint');
+        // one row per (worker, endpoint): the same browser can carry both the
+        // worker's and the admin's registration without stealing each other's
+        return sbUpsert('ac_push_subs', [{ worker_id: wid, endpoint: sub.endpoint, sub: sub.toJSON() }], 'worker_id,endpoint');
       })
       .then(function(){
-        localStorage.setItem('ac_push_on', '1');
+        localStorage.setItem('ac_push_on_' + PORTAL, '1');
         toast('Notifications are on for this device');
         // prove it end-to-end: this device gets a confirmation push right away
         sendPush([myPushWorkerId()], 'Notifications are on', "You'll get Astar Care messages like this on this device.");
@@ -429,6 +494,7 @@ function closeModal(){
   var m = document.getElementById('ac-modal');
   if (m) m.remove();
   document.body.style.overflow = '';
+  if (rt.upd) { location.reload(); return; }
   if (rt.pending) scheduleLive();
 }
 function openModal(node, opts){
