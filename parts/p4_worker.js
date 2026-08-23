@@ -36,7 +36,7 @@ function viewWorkerHome(main, w){
       el('div', { style: 'color:var(--acc);flex:none;margin-top:2px' }, svgIcon(IC.bell)),
       el('div', { style: 'flex:1;min-width:0' }, [
         el('b', { style: 'font-size:14px' }, 'Get notified on this phone'),
-        el('div', { 'class': 't-cap', style: 'margin-top:2px' }, 'Reminders and messages from Ash pop up like normal app notifications.'),
+        el('div', { 'class': 't-cap', style: 'margin-top:2px' }, 'Reminders and messages pop up like normal app notifications.'),
         el('div', { style: 'display:flex;gap:8px;margin-top:10px' }, [
           el('button', { 'class': 'btn btn-sm btn-pri', onclick: enablePush }, 'Turn on'),
           el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ localStorage.setItem('ac_push_dismiss', '1'); render(); } }, 'Not now')
@@ -49,7 +49,7 @@ function viewWorkerHome(main, w){
   var rems = state.data.reminders.filter(function(r){ return r.worker_id === w.id && !r.acknowledged_at; });
   if (rems.length) {
     var sec = el('div', { 'class': 'section' });
-    sec.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, 'From Ash'));
+    sec.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, 'From the office'));
     rems.forEach(function(r){
       var shift = r.shift_id ? shiftById(r.shift_id) : null;
       sec.appendChild(el('div', { 'class': 'banner acc', style: 'margin-bottom:10px' }, [
@@ -115,7 +115,7 @@ function viewWorkerHome(main, w){
     secU.appendChild(el('div', { 'class': 'card empty' }, [
       el('div', { 'class': 'e-art' }, '—'),
       el('b', null, 'No upcoming shifts yet'),
-      'Ash is still building next week’s roster.'
+      'Next week’s roster is still being built.'
     ]));
   } else {
     var list = el('div', { 'class': 'card', style: 'padding:4px 16px' });
@@ -259,7 +259,7 @@ function clockBtn(s, w, kind){
     svgIcon(IC.clock), kind === 'in' ? 'Clock in' : 'Clock out'
   ]);
   function doClock(){
-    if (!c) { toast('This shift has no client attached — ask Ash to fix it.', true); return; }
+    if (!c) { toast('This shift has no client attached — ask the office to fix it.', true); return; }
     if (!navigator.geolocation) { toast('Location is not available on this device.', true); return; }
     btn.disabled = true; btn.textContent = 'Locating…';
     navigator.geolocation.getCurrentPosition(function(pos){
@@ -373,7 +373,7 @@ function viewAvailability(main, w){
         .then(function(){ toast('Availability submitted — thanks!'); refresh(); })
         ["catch"](function(e){ busyBtn(saveBtn, false); toast(e.message, true); });
     } }, 'Submit availability');
-    card.appendChild(el('p', { 'class': 't-cap', style: 'margin-top:12px' }, 'You can submit once — after that, any change goes to Ash as a message below.'));
+    card.appendChild(el('p', { 'class': 't-cap', style: 'margin-top:12px' }, 'You can submit once — after that, any change goes to the office as a message below.'));
     card.appendChild(saveBtn);
   } else if (existing) {
     card.appendChild(el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:10px' }, [
@@ -386,12 +386,12 @@ function viewAvailability(main, w){
       return el('span', { 'class': 'tag ' + (v ? 'tag-ok' : 'tag-mut') }, DOW3[dow(d)]);
     })));
     card.appendChild(el('p', { 'class': 't-cap', style: 'margin-top:12px' },
-      'Availability is submitted once a week. Something changed? Send Ash a message below — it lands in the admin inbox and pings Ash straight away.'));
+      'Availability is submitted once a week. Something changed? Send a message below — it goes straight to the office.'));
   } else {
     card.appendChild(el('div', { 'class': 'empty', style: 'padding:24px 12px' }, [
       el('div', { 'class': 'e-art' }, '🗓'),
       el('b', null, 'Opens on Saturday'),
-      'Availability for next week is submitted each Saturday. Anything urgent in the meantime — message Ash below.'
+      'Availability for next week is submitted each Saturday. Anything urgent in the meantime — send a message below.'
     ]));
   }
   main.appendChild(card);
@@ -401,7 +401,7 @@ function viewAvailability(main, w){
   sec.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, 'Something changed?'));
   var uc = el('div', { 'class': 'card card-pad' });
   uc.appendChild(el('p', { 'class': 't-mut', style: 'font-size:14px;margin-bottom:12px' },
-    "If your availability has changed at short notice, send Ash an urgent message — it lands straight in the admin inbox."));
+    "If your availability has changed at short notice, send an urgent message — it goes straight to the office."));
   var ta = el('textarea', { 'class': 'ta', rows: '3', placeholder: "e.g. I can't do Thursday any more — sorry!" });
   uc.appendChild(ta);
   var flagBtn = el('button', { 'class': 'btn btn-dark', style: 'margin-top:12px', onclick: function(){
@@ -411,7 +411,7 @@ function viewAvailability(main, w){
     sbIns('ac_flags', [{ kind: 'availability', worker_id: w.id, urgent: true, msg: msg }])
       .then(function(){
         sendPush(adminIds(), 'Urgent from ' + firstName(w.name), msg);
-        ta.value = ''; busyBtn(flagBtn, false); toast('Sent to Ash as urgent'); refresh();
+        ta.value = ''; busyBtn(flagBtn, false); toast('Sent as urgent'); refresh();
       })
       ["catch"](function(e){ busyBtn(flagBtn, false); toast(e.message, true); });
   } }, [svgIcon(IC.send), 'Send urgent change']);

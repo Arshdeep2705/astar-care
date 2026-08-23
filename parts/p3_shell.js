@@ -108,7 +108,7 @@ function doWorkerLogin(form){
   sbLogin(email, pass).then(function(sess){
     return sbSel('ac_workers', 'select=*&email=eq.' + encodeURIComponent(email)).then(function(rows){
       var w = rows[0];
-      if (!w) throw new Error('No worker record found for this email. Ask Ash to add you.');
+      if (!w) throw new Error('No worker record found for this email. Ask the office to add you.');
       if (w.must_change_password) {
         state.pwChange = { token: sess.access_token, workerId: w.id, name: w.name };
         render();

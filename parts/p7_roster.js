@@ -420,7 +420,7 @@ function openReminder(s, w){
     busyBtn(sendBtn, true);
     var wantEmail = emailChk.checked;
     sbIns('ac_reminders', [{ shift_id: s.id, worker_id: w.id, sent_by: 'Ash', message: msg, emailed: wantEmail }]).then(function(){
-      sendPush([w.id], 'Reminder from Ash', msg);
+      sendPush([w.id], 'Astar Care reminder', msg);
       if (wantEmail) {
         window.open('mailto:' + encodeURIComponent(w.email) + '?subject=' + encodeURIComponent('Shift note reminder — ' + (c ? c.name : '') + ' ' + fmtDM(s.date)) + '&body=' + encodeURIComponent(msg), '_blank');
       }
@@ -461,7 +461,7 @@ function openSendRoster(){
   workers.forEach(function(w){
     var lines = perWorker[w.id].sort(function(a,b){ return a.date === b.date ? tMin(a.start_t) - tMin(b.start_t) : (a.date < b.date ? -1 : 1); })
       .map(function(s){ var c = clientById(s.client_id); return fmtDate(s.date) + ': ' + (c ? c.name : '') + ' ' + fmtRange(s.start_t, s.end_t) + (s.type === 'sleepover' ? ' (sleepover)' : ''); });
-    var msg = 'Hi ' + firstName(w.name) + ', here is your roster for ' + fmtDate(from) + ' – ' + fmtDate(to) + ':\n\n' + lines.join('\n') + '\n\nThanks, Ash';
+    var msg = 'Hi ' + firstName(w.name) + ', here is your roster for ' + fmtDate(from) + ' – ' + fmtDate(to) + ':\n\n' + lines.join('\n') + '\n\nThanks!';
     body.appendChild(el('div', { 'class': 'card card-pad', style: 'margin-bottom:10px;padding:14px 16px' }, [
       el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:8px' }, [
         el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),

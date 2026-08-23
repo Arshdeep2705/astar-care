@@ -133,7 +133,7 @@ function calAgenda(main, w, shifts, r){
     box.appendChild(el('div', { 'class': 'card empty' }, [
       el('div', { 'class': 'e-art' }, '···'),
       el('b', null, 'No shifts this month'),
-      'When Ash rosters you on, your days appear here.'
+      'When you’re rostered on, your days appear here.'
     ]));
   }
   main.appendChild(box);
