@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Astar Care</title>
 <meta name="theme-color" content="#f7f6f3">
 <link rel="manifest" href="/manifest.json">
@@ -126,7 +126,9 @@ input,select,textarea{font:inherit;color:inherit}
 .field label{display:block;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px}
 .field .hint{font-size:12.5px;color:var(--mut);font-weight:400;margin-top:2px}
 .inp,.sel,.ta{width:100%;background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-m);
-  padding:10px 13px;font-size:15px;min-height:44px;transition:border-color .15s var(--ease),box-shadow .15s var(--ease)}
+  padding:10px 13px;font-size:16px;min-height:44px;transition:border-color .15s var(--ease),box-shadow .15s var(--ease)}
+/* fields under 16px make iOS Safari zoom the page in on focus — never allow it */
+@media(max-width:900px){ .hdr-side .sel{font-size:16px !important} }
 .inp:focus,.sel:focus,.ta:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-soft);outline:none}
 .ta{line-height:1.6;resize:vertical;font-family:var(--sans)}
 .sel{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235c6570' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;padding-right:36px}
@@ -334,7 +336,7 @@ var BUCKET = 'ac-files';
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260823220952';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260824090004';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
