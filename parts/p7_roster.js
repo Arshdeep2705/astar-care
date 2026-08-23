@@ -71,6 +71,7 @@ function viewRoster(main){
   main.appendChild(el('div', { 'class': 'section-head', style: 'margin:6px 0 16px;flex-wrap:wrap' }, [
     el('div', { 'class': 't-display' }, 'Roster'),
     el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
+      state.roster.range === 'week' ? el('button', { 'class': 'btn btn-sec btn-sm', onclick: copyLastWeek }, [svgIcon(IC.grid), 'Copy last week']) : null,
       el('button', { 'class': 'btn btn-sec btn-sm', onclick: openSendRoster }, [svgIcon(IC.send), 'Send roster'])
     ])
   ]));
@@ -120,6 +121,35 @@ function viewRoster(main){
     if (mobile) main.appendChild(rosterMobileWeek(wkDays, rows, t));
     else main.appendChild(rosterWeekGrid(wkDays, groups, t));
   }
+}
+
+/* one tap fills the visible week with last week's shifts (same workers),
+   skipping any slot that already has a shift */
+function copyLastWeek(){
+  var anchor = state.roster.anchor;
+  var rows = [];
+  for (var i = 0; i < 7; i++) {
+    (function(i){
+      var d = addDays(anchor, i), prev = addDays(d, -7);
+      state.data.shifts.forEach(function(s){
+        if (s.date !== prev) return;
+        if (s.req_id && shiftFor(s.req_id, d)) return;
+        if (!s.req_id && state.data.shifts.some(function(o){ return o.date === d && o.client_id === s.client_id && o.start_t === s.start_t; })) return;
+        rows.push({ client_id: s.client_id, req_id: s.req_id, worker_id: s.worker_id,
+          date: d, start_t: s.start_t, end_t: s.end_t, type: s.type });
+      });
+    })(i);
+  }
+  if (!rows.length) { toast('Nothing to copy — this week already has last week’s shifts.'); return; }
+  confirmDlg('Copy last week?',
+    'Copies ' + rows.length + ' shift' + (rows.length === 1 ? '' : 's') + ' (same workers) from ' +
+    fmtDate(addDays(anchor, -7)) + ' – ' + fmtDate(addDays(anchor, -1)) + ' into this week. Slots already filled are left alone.',
+    'Copy ' + rows.length + ' shifts',
+    function(){
+      sbIns('ac_shifts', rows)
+        .then(function(){ toast('Copied ' + rows.length + ' shifts from last week'); refresh(); })
+        ["catch"](function(e){ toast(e.message, true); refresh(); });
+    });
 }
 
 function gapCreateShift(row, d, btn){
@@ -316,12 +346,19 @@ function openAdminShift(s){
   }
   /* clock */
   body.appendChild(el('div', { 'class': 't-label', style: 'margin:16px 0 8px' }, 'Clock in & out'));
-  if (!cin && !cout) {
-    body.appendChild(el('div', { 'class': 'notice' }, shiftEnded(s) ? 'No clock records for this shift.' : 'Not clocked in yet.'));
-  } else {
+  function clockEditBtn(rec, kind){
+    return el('button', { 'class': 'btn btn-sm btn-ghost', style: 'min-height:28px;padding:2px 8px;font-size:12px', onclick: function(){
+      openClockEdit(s, rec, kind);
+    } }, rec ? 'Fix time' : '+ Add');
+  }
+  {
     var kv = el('div', { 'class': 'card', style: 'padding:6px 16px;box-shadow:none;background:var(--paper);border:0' });
-    if (cin) kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Clock in'), el('span', { 'class': 'v' }, fmtDT(cin.at) + (cin.distance_m != null ? ' · ' + Math.round(cin.distance_m) + ' m from site' : '')) ]));
-    if (cout) kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Clock out'), el('span', { 'class': 'v' }, fmtDT(cout.at) + (cout.distance_m != null ? ' · ' + Math.round(cout.distance_m) + ' m from site' : '')) ]));
+    kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Clock in'),
+      el('span', { 'class': 'v', style: 'display:flex;align-items:center;gap:6px;justify-content:flex-end' }, [
+        cin ? fmtDT(cin.at) + (cin.distance_m != null ? ' · ' + Math.round(cin.distance_m) + ' m' : '') : '—', clockEditBtn(cin, 'in') ]) ]));
+    kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Clock out'),
+      el('span', { 'class': 'v', style: 'display:flex;align-items:center;gap:6px;justify-content:flex-end' }, [
+        cout ? fmtDT(cout.at) + (cout.distance_m != null ? ' · ' + Math.round(cout.distance_m) + ' m' : '') : '—', clockEditBtn(cout, 'out') ]) ]));
     if (actual != null) {
       var varc = actual - rostered;
       kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Worked'), el('span', { 'class': 'v' }, hrsFmt(actual) + ' h') ]));
@@ -398,6 +435,26 @@ function openEditRoster(s){
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('p', { 'class': 't-mut', style: 'font-size:14px;margin-bottom:14px' }, (c ? c.name : '') + ' · ' + fmtDate(s.date) + ' · ' + fmtRange(s.start_t, s.end_t)),
+      el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Date & times'),
+      el('div', { 'class': 'field' }, [
+        el('label', null, 'Date'),
+        el('input', { 'class': 'inp', type: 'date', id: 'es-date', value: s.date })
+      ]),
+      el('div', { 'class': 'grid2' }, [
+        el('div', { 'class': 'field' }, [ el('label', null, 'Start'), el('input', { 'class': 'inp', type: 'time', id: 'es-start', value: s.start_t }) ]),
+        el('div', { 'class': 'field' }, [ el('label', null, 'End'), el('input', { 'class': 'inp', type: 'time', id: 'es-end', value: s.end_t }) ])
+      ]),
+      el('button', { 'class': 'btn btn-pri btn-block', style: 'margin-bottom:16px', onclick: function(e){
+        var nd = document.getElementById('es-date').value;
+        var ns = document.getElementById('es-start').value;
+        var ne = document.getElementById('es-end').value;
+        if (!nd || !ns || !ne) { toast('Fill in the date and both times.', true); return; }
+        busyBtn(e.currentTarget, true);
+        sbUpd('ac_shifts', 'id=eq.' + s.id, { date: nd, start_t: ns, end_t: ne, type: tMin(ne) <= tMin(ns) ? s.type : s.type })
+          .then(function(){ closeModal(); toast('Shift updated to ' + fmtDate(nd) + ' · ' + fmtRange(ns, ne)); refresh(); })
+          ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+      } }, 'Save date & times'),
+      el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Worker'),
       el('div', { style: 'display:flex;flex-direction:column;gap:8px' }, [
         el('button', { 'class': 'btn btn-sec btn-block', onclick: function(){ closeModal(); openAssign(s); } }, 'Reassign to someone else'),
         s.worker_id ? el('button', { 'class': 'btn btn-sec btn-block', onclick: function(){
@@ -409,6 +466,50 @@ function openEditRoster(s){
           }, true);
         } }, 'Delete this shift')
       ])
+    ])
+  ]);
+  openModal(m);
+}
+
+/* ---------- fix / add clock records ---------- */
+function openClockEdit(s, rec, kind){
+  function dtLocalVal(d){ return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  var def = rec ? dtLocalVal(new Date(rec.at)) : dtLocalVal(kind === 'in' ? shiftStartDate(s) : shiftEndDate(s));
+  var inp = el('input', { 'class': 'inp', type: 'datetime-local', value: def });
+  function done(msg){
+    closeModal(); toast(msg);
+    refresh().then(function(){ var ns = shiftById(s.id); if (ns) openAdminShift(ns); });
+  }
+  var m = el('div', { 'class': 'modal', style: 'max-width:400px' }, [
+    el('div', { 'class': 'sheet-grab' }),
+    el('div', { 'class': 'modal-head' }, [
+      el('div', { 'class': 't-title' }, (rec ? 'Fix clock ' : 'Add clock ') + kind),
+      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+    ]),
+    el('div', { 'class': 'modal-body' }, [
+      el('div', { 'class': 'field' }, [
+        el('label', null, 'Actual time'),
+        inp,
+        el('div', { 'class': 'hint' }, 'Recorded times drive worked hours and the variance against the roster.')
+      ])
+    ]),
+    el('div', { 'class': 'modal-foot' }, [
+      rec ? el('button', { 'class': 'btn btn-danger', onclick: function(){
+        confirmDlg('Remove this clock record?', 'The recorded ' + kind + ' time is deleted.', 'Remove', function(){
+          sbDel('ac_clock', 'id=eq.' + rec.id).then(function(){ done('Clock ' + kind + ' removed'); })["catch"](function(e){ toast(e.message, true); });
+        }, true);
+      } }, 'Remove') : null,
+      el('div', { 'class': 'spacer' }),
+      el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
+      el('button', { 'class': 'btn btn-pri', onclick: function(e){
+        if (!inp.value) { toast('Pick a time first.', true); return; }
+        var iso = new Date(inp.value).toISOString();
+        busyBtn(e.currentTarget, true);
+        (rec ? sbUpd('ac_clock', 'id=eq.' + rec.id, { at: iso })
+             : sbIns('ac_clock', [{ shift_id: s.id, worker_id: s.worker_id, kind: kind, at: iso, distance_m: null }]))
+          .then(function(){ done('Clock ' + kind + ' ' + (rec ? 'updated' : 'added')); })
+          ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+      } }, 'Save')
     ])
   ]);
   openModal(m);

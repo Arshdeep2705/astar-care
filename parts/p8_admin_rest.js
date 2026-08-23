@@ -324,7 +324,8 @@ function viewTeam(main){
               ["catch"](function(e){ toast(e.message, true); });
           });
         } }, 'Reset password') : null,
-        !w.is_admin ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openRates(w); } }, 'Rates') : null
+        !w.is_admin ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openRates(w); } }, 'Rates') : null,
+        el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openWorkerModal(w); } }, 'Edit')
       ])
     ]));
   });
@@ -332,23 +333,181 @@ function viewTeam(main){
 
   /* clients */
   var sec = el('div', { 'class': 'section' });
-  sec.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, 'Clients'));
+  sec.appendChild(el('div', { 'class': 'section-head', style: 'margin-bottom:10px' }, [
+    el('div', { 'class': 't-label' }, 'Clients'),
+    el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(){ openClientModal(null); } }, [svgIcon(IC.plus), 'Add client'])
+  ]));
   state.data.clients.forEach(function(c){
     var reqs = state.data.reqs.filter(function(r){ return r.client_id === c.id; });
     sec.appendChild(el('div', { 'class': 'card card-pad', style: 'margin-bottom:12px;border-left:4px solid ' + c.colour }, [
-      el('div', { 'class': 't-sub', style: 'color:' + c.colour }, c.name),
+      el('div', { style: 'display:flex;align-items:baseline;gap:10px' }, [
+        el('div', { 'class': 't-sub', style: 'color:' + c.colour }, c.name),
+        el('button', { 'class': 'btn btn-sm btn-ghost', style: 'min-height:28px;padding:2px 10px;font-size:12px', onclick: function(){ openClientModal(c); } }, 'Edit client')
+      ]),
       el('div', { 'class': 't-cap', style: 'display:flex;align-items:center;gap:4px;margin:4px 0 10px' }, [svgIcon(IC.pin), c.address + ' · geofence ' + (c.radius_m || 200) + ' m']),
       el('div', { style: 'display:flex;flex-direction:column;gap:6px' }, reqs.map(function(r){
-        return el('div', { style: 'display:flex;gap:10px;align-items:center;font-size:13.5px' }, [
+        return el('div', { style: 'display:flex;gap:10px;align-items:center;font-size:13.5px;flex-wrap:wrap' }, [
           el('span', { 'class': 'tag ' + (r.type === 'sleepover' ? 'tag-sleep' : 'tag-day') }, r.type === 'sleepover' ? 'Sleepover' : 'Day'),
           el('b', null, r.label),
           el('span', { 'class': 't-mut t-num' }, fmtRange(r.start_t, r.end_t)),
-          el('span', { 'class': 't-cap' }, r.days.length === 7 ? 'Every day' : r.days.slice().sort().map(function(d){ return DOW3[d]; }).join(' '))
+          el('span', { 'class': 't-cap' }, r.days.length === 7 ? 'Every day' : r.days.slice().sort().map(function(d){ return DOW3[d]; }).join(' ')),
+          el('button', { 'class': 'btn btn-sm btn-ghost', style: 'min-height:26px;padding:1px 8px;font-size:12px;margin-left:auto', onclick: function(){ openReqModal(c, r); } }, 'Edit')
         ]);
-      }))
+      })),
+      el('button', { 'class': 'btn btn-sm btn-sec', style: 'margin-top:10px', onclick: function(){ openReqModal(c, null); } }, [svgIcon(IC.plus), 'Add shift type'])
     ]));
   });
   main.appendChild(sec);
+}
+
+/* ---------- client editor ---------- */
+function openClientModal(c){
+  var f = { name: c ? c.name : '', address: c ? c.address : '', colour: c ? c.colour : '#0e7568',
+    radius_m: c ? (c.radius_m || 200) : 200, lat: c && c.lat != null ? String(c.lat) : '', lng: c && c.lng != null ? String(c.lng) : '' };
+  function fld(label, key, type, hint){
+    return el('div', { 'class': 'field' }, [
+      el('label', null, label),
+      el('input', { 'class': 'inp', type: type || 'text', value: f[key], oninput: function(e){ f[key] = e.target.value; } }),
+      hint ? el('div', { 'class': 'hint' }, hint) : null
+    ]);
+  }
+  var m = el('div', { 'class': 'modal', style: 'max-width:460px' }, [
+    el('div', { 'class': 'sheet-grab' }),
+    el('div', { 'class': 'modal-head' }, [
+      el('div', { 'class': 't-title' }, c ? 'Edit ' + c.name : 'Add client'),
+      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+    ]),
+    el('div', { 'class': 'modal-body' }, [
+      fld('Name', 'name'),
+      fld('Address', 'address'),
+      el('div', { 'class': 'grid2' }, [
+        fld('Latitude', 'lat'),
+        fld('Longitude', 'lng')
+      ]),
+      el('div', { 'class': 'hint', style: 'margin:-8px 0 14px' }, 'Used for the clock-in distance check. On Google Maps, right-click the address pin and copy the two numbers. Leave blank to skip the geofence.'),
+      el('div', { 'class': 'grid2' }, [
+        fld('Geofence (metres)', 'radius_m', 'number'),
+        el('div', { 'class': 'field' }, [
+          el('label', null, 'Colour'),
+          el('input', { type: 'color', value: f.colour, style: 'width:64px;height:44px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);padding:4px', onchange: function(e){ f.colour = e.target.value; } })
+        ])
+      ])
+    ]),
+    el('div', { 'class': 'modal-foot' }, [
+      el('div', { 'class': 'spacer' }),
+      el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
+      el('button', { 'class': 'btn btn-pri', onclick: function(e){
+        if (!f.name.trim() || !f.address.trim()) { toast('Name and address, please.', true); return; }
+        var rec = { name: f.name.trim(), address: f.address.trim(), colour: f.colour,
+          radius_m: parseInt(f.radius_m, 10) || 200,
+          lat: f.lat === '' ? null : parseFloat(f.lat), lng: f.lng === '' ? null : parseFloat(f.lng) };
+        busyBtn(e.currentTarget, true);
+        (c ? sbUpd('ac_clients', 'id=eq.' + c.id, rec) : sbIns('ac_clients', [rec]))
+          .then(function(){ closeModal(); toast(c ? f.name + ' updated' : f.name + ' added — now add their shift types'); refresh(); })
+          ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+      } }, c ? 'Save changes' : 'Add client')
+    ])
+  ]);
+  openModal(m);
+}
+
+/* ---------- shift requirement editor ---------- */
+function openReqModal(client, r){
+  var f = { label: r ? r.label : 'Day shift', type: r ? r.type : 'day',
+    days: r ? r.days.slice() : [1,2,3,4,5], start_t: r ? r.start_t : '09:00', end_t: r ? r.end_t : '17:00' };
+  var typeSel = el('select', { 'class': 'sel', onchange: function(e){ f.type = e.target.value; } }, [
+    el('option', { value: 'day', selected: f.type === 'day' }, 'Day'),
+    el('option', { value: 'sleepover', selected: f.type === 'sleepover' }, 'Sleepover (crosses midnight)')
+  ]);
+  var dayBoxes = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, [1,2,3,4,5,6,0].map(function(d){
+    var on = f.days.indexOf(d) >= 0;
+    var b = el('button', { 'class': 'btn btn-sm ' + (on ? 'btn-dark' : 'btn-sec'), onclick: function(){
+      var i = f.days.indexOf(d);
+      if (i >= 0) f.days.splice(i, 1); else f.days.push(d);
+      b.className = 'btn btn-sm ' + (f.days.indexOf(d) >= 0 ? 'btn-dark' : 'btn-sec');
+    } }, DOW3[d]);
+    return b;
+  }));
+  var m = el('div', { 'class': 'modal', style: 'max-width:460px' }, [
+    el('div', { 'class': 'sheet-grab' }),
+    el('div', { 'class': 'modal-head' }, [
+      el('div', null, [
+        el('div', { 'class': 't-title' }, (r ? 'Edit shift type' : 'Add shift type')),
+        el('div', { 'class': 't-cap' }, client.name)
+      ]),
+      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+    ]),
+    el('div', { 'class': 'modal-body' }, [
+      el('div', { 'class': 'field' }, [ el('label', null, 'Label'),
+        el('input', { 'class': 'inp', value: f.label, oninput: function(e){ f.label = e.target.value; } }) ]),
+      el('div', { 'class': 'field' }, [ el('label', null, 'Type'), typeSel ]),
+      el('div', { 'class': 'field' }, [ el('label', null, 'Days'), dayBoxes ]),
+      el('div', { 'class': 'grid2' }, [
+        el('div', { 'class': 'field' }, [ el('label', null, 'Start'), el('input', { 'class': 'inp', type: 'time', value: f.start_t, onchange: function(e){ f.start_t = e.target.value; } }) ]),
+        el('div', { 'class': 'field' }, [ el('label', null, 'End'), el('input', { 'class': 'inp', type: 'time', value: f.end_t, onchange: function(e){ f.end_t = e.target.value; } }) ])
+      ]),
+      el('div', { 'class': 'hint', style: 'margin-top:-6px' }, 'Changing times here shapes the roster grid and NEW shifts — shifts already created keep their own times (edit those from the roster).')
+    ]),
+    el('div', { 'class': 'modal-foot' }, [
+      r ? el('button', { 'class': 'btn btn-danger', onclick: function(){
+        confirmDlg('Remove this shift type?', 'It disappears from the roster grid. Existing shifts stay.', 'Remove', function(){
+          sbUpd('ac_reqs', 'id=eq.' + r.id, { active: false })
+            .then(function(){ closeModal(); toast('Shift type removed'); refresh(); })
+            ["catch"](function(e){ toast(e.message, true); });
+        }, true);
+      } }, 'Remove') : null,
+      el('div', { 'class': 'spacer' }),
+      el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
+      el('button', { 'class': 'btn btn-pri', onclick: function(e){
+        if (!f.label.trim()) { toast('Give it a label.', true); return; }
+        if (!f.days.length) { toast('Pick at least one day.', true); return; }
+        if (!f.start_t || !f.end_t) { toast('Set both times.', true); return; }
+        var rec = { label: f.label.trim(), type: f.type, days: f.days, start_t: f.start_t, end_t: f.end_t };
+        busyBtn(e.currentTarget, true);
+        (r ? sbUpd('ac_reqs', 'id=eq.' + r.id, rec) : sbIns('ac_reqs', [Object.assign({ client_id: client.id }, rec)]))
+          .then(function(){ closeModal(); toast('Shift type saved'); refresh(); })
+          ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+      } }, 'Save')
+    ])
+  ]);
+  openModal(m);
+}
+
+/* ---------- worker editor ---------- */
+function openWorkerModal(w){
+  var f = { name: w.name, email: w.email, colour: w.colour, active: w.active };
+  var m = el('div', { 'class': 'modal', style: 'max-width:420px' }, [
+    el('div', { 'class': 'sheet-grab' }),
+    el('div', { 'class': 'modal-head' }, [
+      el('div', { 'class': 't-title' }, 'Edit ' + w.name),
+      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+    ]),
+    el('div', { 'class': 'modal-body' }, [
+      el('div', { 'class': 'field' }, [ el('label', null, 'Name'),
+        el('input', { 'class': 'inp', value: f.name, oninput: function(e){ f.name = e.target.value; } }) ]),
+      el('div', { 'class': 'field' }, [ el('label', null, 'Email'),
+        el('input', { 'class': 'inp', type: 'email', value: f.email, oninput: function(e){ f.email = e.target.value; } }),
+        el('div', { 'class': 'hint' }, 'Changing this does not change the email they sign in with.') ]),
+      el('div', { 'class': 'field' }, [ el('label', null, 'Colour'),
+        el('input', { type: 'color', value: f.colour, style: 'width:64px;height:44px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);padding:4px', onchange: function(e){ f.colour = e.target.value; } }) ]),
+      el('label', { 'class': 'checkrow' }, [
+        el('input', { type: 'checkbox', checked: f.active, onchange: function(e){ f.active = e.target.checked; } }),
+        el('span', { style: 'font-size:14px' }, 'Active (shows in rostering and pay)')
+      ])
+    ]),
+    el('div', { 'class': 'modal-foot' }, [
+      el('div', { 'class': 'spacer' }),
+      el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
+      el('button', { 'class': 'btn btn-pri', onclick: function(e){
+        if (!f.name.trim() || !/@/.test(f.email)) { toast('Name and a valid email, please.', true); return; }
+        busyBtn(e.currentTarget, true);
+        sbUpd('ac_workers', 'id=eq.' + w.id, { name: f.name.trim(), email: f.email.trim().toLowerCase(), colour: f.colour, active: f.active })
+          .then(function(){ closeModal(); toast(f.name + ' updated'); refresh(); })
+          ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+      } }, 'Save changes')
+    ])
+  ]);
+  openModal(m);
 }
 
 function createLogin(w){

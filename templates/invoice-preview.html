@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invoice Template Preview</title>
+<style>
+  :root {
+    --accent: #0e7568;
+    --ink: #14181d;
+    --hairline: #e7e4de;
+    --headfill: #e5f1ef;
+    --notefill: #f4f8f7;
+    --muted: #5a6068;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Calibri, "Segoe UI", Arial, sans-serif;
+    color: var(--ink);
+    background: #f0efec;
+    padding: 24px 12px;
+  }
+  .page {
+    max-width: 800px;
+    margin: 0 auto;
+    background: #ffffff;
+    padding: 40px 44px 48px;
+    border: 1px solid var(--hairline);
+  }
+  /* Header */
+  .header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .from p { font-size: 14px; line-height: 1.55; }
+  .label { font-size: 12px; font-weight: bold; color: var(--muted); letter-spacing: 0.06em; margin-bottom: 4px; }
+  .name { font-weight: bold; }
+  h1.title { color: var(--accent); font-size: 40px; font-weight: bold; text-align: right; letter-spacing: 0.02em; }
+  .billto { margin-top: 22px; }
+  .billto p { font-size: 14px; line-height: 1.55; }
+  .meta { margin-top: 18px; font-size: 14px; }
+  .meta div { line-height: 1.7; }
+  .meta strong { display: inline-block; min-width: 130px; }
+  /* Sections */
+  h2.section { color: var(--accent); font-size: 16px; font-weight: bold; margin: 26px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { border: 1px solid var(--hairline); padding: 6px 10px; height: 28px; }
+  th { background: var(--headfill); font-weight: bold; text-align: left; }
+  th.num, td.num { text-align: right; }
+  th.ctr, td.ctr { text-align: center; }
+  .example td { color: var(--muted); }
+  .example td.date { font-style: italic; }
+  col.c-date { width: 15%; }
+  col.c-desc { width: 47%; }
+  col.c-qty  { width: 10%; }
+  col.c-rate { width: 13%; }
+  col.c-amt  { width: 15%; }
+  /* Totals */
+  .totals { margin-top: 22px; width: 100%; border-collapse: collapse; font-size: 14px; }
+  .totals td { border: none; padding: 5px 10px; }
+  .totals td.lbl { text-align: right; font-weight: bold; }
+  .totals td.val { text-align: right; border: 1px solid var(--hairline); width: 15%; }
+  .totals tr.total td { background: var(--accent); color: #ffffff; font-weight: bold; font-size: 15px; }
+  .totals tr.total td.val { border-color: var(--accent); }
+  /* Payment */
+  .payment { margin-top: 26px; font-size: 14px; }
+  .payment div { line-height: 1.8; }
+  .payment strong { display: inline-block; min-width: 140px; }
+  /* Rates note panel */
+  .rates {
+    margin-top: 28px;
+    background: var(--notefill);
+    border: 1px solid var(--hairline);
+    padding: 14px 18px;
+  }
+  .rates h3 { color: var(--accent); font-size: 15px; font-weight: bold; margin-bottom: 8px; }
+  .rates .delete-note { font-weight: bold; text-decoration: underline; }
+  .rates ul { list-style: none; }
+  .rates li { font-size: 13px; line-height: 1.7; }
+  .rates li::before { content: "\2022\00a0\00a0"; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="from">
+      <p class="label">FROM</p>
+      <p class="name">[Your full name]</p>
+      <p>ABN: [Your ABN]</p>
+      <p>[Your address]</p>
+      <p>[Your phone]</p>
+      <p>[Your email]</p>
+    </div>
+    <h1 class="title">INVOICE</h1>
+  </div>
+
+  <div class="billto">
+    <p class="label">BILL TO</p>
+    <p class="name">ANCHORCARE PTY LTD</p>
+    <p>ABN 25 691 412 665</p>
+  </div>
+
+  <div class="meta">
+    <div><strong>Invoice number:</strong> [e.g. 001]</div>
+    <div><strong>Invoice date:</strong> [date]</div>
+    <div><strong>Period:</strong> [start date] &ndash; [end date]</div>
+  </div>
+
+  <!-- Shifts -->
+  <h2 class="section">Shifts</h2>
+  <table>
+    <colgroup>
+      <col class="c-date"><col class="c-desc"><col class="c-qty"><col class="c-rate"><col class="c-amt">
+    </colgroup>
+    <thead>
+      <tr><th>Date</th><th>Shift</th><th class="ctr">Qty</th><th class="ctr">Rate ($)</th><th class="ctr">Amount ($)</th></tr>
+    </thead>
+    <tbody>
+      <tr class="example"><td class="date">example &mdash; 01/09</td><td>Day shift 9:00am&ndash;6:00pm</td><td class="ctr">1</td><td class="num">$250.00</td><td class="num">$250.00</td></tr>
+      <tr class="example"><td class="date">example &mdash; 01/09</td><td>Sleepover 6:00pm&ndash;9:00am</td><td class="ctr">1</td><td class="num">$150.00</td><td class="num">$150.00</td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+    </tbody>
+  </table>
+
+  <!-- Kilometres -->
+  <h2 class="section">Kilometres</h2>
+  <table>
+    <colgroup>
+      <col class="c-date"><col class="c-desc"><col class="c-qty"><col class="c-rate"><col class="c-amt">
+    </colgroup>
+    <thead>
+      <tr><th>Date</th><th>Trip details</th><th class="ctr">Km</th><th class="ctr">Rate ($)</th><th class="ctr">Amount ($)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td></td><td></td><td></td><td class="num">$0.50</td><td></td></tr>
+      <tr><td></td><td></td><td></td><td class="num">$0.50</td><td></td></tr>
+      <tr><td></td><td></td><td></td><td class="num">$0.50</td><td></td></tr>
+    </tbody>
+  </table>
+
+  <!-- Reimbursements -->
+  <h2 class="section">Reimbursements</h2>
+  <table>
+    <colgroup>
+      <col class="c-date"><col style="width:70%"><col class="c-amt">
+    </colgroup>
+    <thead>
+      <tr><th>Date</th><th>Description</th><th class="ctr">Amount ($)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td></tr>
+      <tr><td></td><td></td><td></td></tr>
+    </tbody>
+  </table>
+
+  <!-- Totals -->
+  <table class="totals">
+    <tbody>
+      <tr><td class="lbl">Shifts subtotal</td><td class="val">$400.00</td></tr>
+      <tr><td class="lbl">Kilometres subtotal</td><td class="val">$0.00</td></tr>
+      <tr><td class="lbl">Reimbursements subtotal</td><td class="val">$0.00</td></tr>
+      <tr><td class="lbl">GST (10%)</td><td class="val"></td></tr>
+      <tr class="total"><td class="lbl">TOTAL DUE</td><td class="val">$400.00</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Payment details -->
+  <div class="payment">
+    <h2 class="section">Payment details</h2>
+    <div><strong>Account name:</strong> [ ]</div>
+    <div><strong>BSB:</strong> [ ]</div>
+    <div><strong>Account number:</strong> [ ]</div>
+  </div>
+
+  <!-- Rates reference -->
+  <div class="rates">
+    <h3>Rates &mdash; for your reference. <span class="delete-note">DELETE this box before sending your invoice.</span></h3>
+    <ul>
+      <li>Day shift (9:00am &ndash; 6:00pm): flat $250</li>
+      <li>Sleepover (6:00pm &ndash; 9:00am): flat $150</li>
+      <li>Extra day hours &mdash; night staff continuing past 9:00am: $250 &divide; 9 = $27.78 per hour, for the hours worked</li>
+      <li>Extra sleepover hours &mdash; day staff staying on into the sleepover: $150 &divide; 15 = $10.00 per hour, for the hours stayed</li>
+      <li>Kilometres: $0.50 per km</li>
+      <li>GST: add 10% only if you are GST registered.</li>
+      <li>Invoices are due fortnightly.</li>
+      <li>Reimbursements: attach the receipts to the same email when you send your invoice.</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>
