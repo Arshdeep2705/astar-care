@@ -484,16 +484,38 @@ function sendPush(workerIds, title, body){
 }
 
 /* ================= toasts & confirm ================= */
+/* keep toasts visible above the iOS on-screen keyboard */
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', function(){
+    var t = document.getElementById('toasts');
+    if (!t) return;
+    var off = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+    t.style.transform = 'translateX(-50%) translateY(-' + Math.max(0, off) + 'px)';
+  });
+}
 function toast(msg, isErr){
   var t = el('div', { 'class': 'toast' + (isErr ? ' err' : '') }, msg);
   document.getElementById('toasts').appendChild(t);
   setTimeout(function(){ t.style.transition = 'opacity .25s'; t.style.opacity = '0';
     setTimeout(function(){ t.remove(); }, 260); }, 2600);
 }
+/* iOS ignores overflow:hidden on body for touch scrolling — the page kept
+   scrolling behind open sheets and Safari's keyboard auto-scroll dragged it
+   around. position:fixed is the lock that actually holds on iOS. */
+function lockBody(){
+  if (document.body.style.position === 'fixed') return;
+  rt.lockY = window.scrollY || 0;
+  document.body.style.cssText = 'position:fixed;top:-' + rt.lockY + 'px;left:0;right:0;overflow:hidden';
+}
+function unlockBody(){
+  if (document.body.style.position !== 'fixed') return;
+  document.body.style.cssText = '';
+  window.scrollTo(0, rt.lockY || 0);
+}
 function closeModal(){
   var m = document.getElementById('ac-modal');
   if (m) m.remove();
-  document.body.style.overflow = '';
+  if (!document.getElementById('ac-modal') && !document.getElementById('ac-confirm')) unlockBody();
   if (rt.upd) { location.reload(); return; }
   if (rt.pending) scheduleLive();
 }
@@ -502,13 +524,13 @@ function openModal(node, opts){
   opts = opts || {};
   var scrim = el('div', { 'class': 'scrim', id: 'ac-modal', onclick: function(e){ if (e.target === scrim && !opts.noDismiss) closeModal(); } }, node);
   document.body.appendChild(scrim);
-  document.body.style.overflow = 'hidden';
+  lockBody();
 }
 /* confirm stacks ON TOP of any open modal so Cancel never destroys an editor */
 function confirmDlg(title, body, okLabel, cb, danger){
   var old = document.getElementById('ac-confirm');
   if (old) old.remove();
-  function closeConfirm(){ var c = document.getElementById('ac-confirm'); if (c) c.remove(); if (!document.getElementById('ac-modal')) document.body.style.overflow = ''; }
+  function closeConfirm(){ var c = document.getElementById('ac-confirm'); if (c) c.remove(); if (!document.getElementById('ac-modal')) unlockBody(); }
   var m = el('div', { 'class': 'modal', style: 'max-width:400px' }, [
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, el('div', { 'class': 't-title' }, title)),
@@ -521,7 +543,7 @@ function confirmDlg(title, body, okLabel, cb, danger){
   ]);
   var scrim = el('div', { 'class': 'scrim', id: 'ac-confirm', style: 'z-index:150', onclick: function(e){ if (e.target === scrim) closeConfirm(); } }, m);
   document.body.appendChild(scrim);
-  document.body.style.overflow = 'hidden';
+  lockBody();
 }
 function busyBtn(btn, on){
   if (on) { btn.dataset.txt = btn.textContent; btn.textContent = 'Saving…'; btn.disabled = true; }

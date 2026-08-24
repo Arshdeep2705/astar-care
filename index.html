@@ -69,7 +69,7 @@ input,select,textarea{font:inherit;color:inherit}
 @media(max-width:640px){ .main{padding:16px 0 calc(84px + var(--sab))} }
 
 /* ---------- header ---------- */
-.hdr{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:40}
+.hdr{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:40;padding-top:env(safe-area-inset-top,0px)}
 .hdr-in{display:flex;align-items:center;gap:20px;min-height:60px}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-weight:600;font-size:19px;color:var(--ink);white-space:nowrap}
 .brand-mark{width:30px;height:30px;border-radius:9px;background:var(--acc);color:#fffefd;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:17px;font-weight:600;flex:none}
@@ -157,9 +157,9 @@ input,select,textarea{font:inherit;color:inherit}
 /* ---------- modal / sheet ---------- */
 .scrim{position:fixed;inset:0;background:rgba(20,24,29,.42);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
   z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;
-  animation:fadein .16s var(--ease)}
+  animation:fadein .16s var(--ease);touch-action:none}
 .modal{background:var(--card);border-radius:var(--r-xl);box-shadow:var(--sh-3);width:100%;max-width:620px;
-  max-height:calc(100vh - 48px);display:flex;flex-direction:column;animation:pop .18s var(--ease)}
+  max-height:calc(100vh - 48px);display:flex;flex-direction:column;animation:pop .18s var(--ease);touch-action:pan-y}
 .modal-wide{max-width:760px}
 .modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px 12px;flex:none}
 .modal-body{padding:8px 24px 20px;overflow-y:auto;overscroll-behavior:contain}
@@ -255,7 +255,7 @@ input,select,textarea{font:inherit;color:inherit}
 .agenda-date .dnm{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
 .agenda-date .dno{font-family:var(--serif);font-size:24px;font-weight:600;color:var(--ink);line-height:1.1}
 .cal-week{border:1px solid var(--line);border-radius:var(--r-l);background:var(--card);overflow:hidden}
-.cw-scroll{max-height:640px;overflow-y:auto}
+.cw-scroll{max-height:640px;overflow-y:auto;overscroll-behavior:contain}
 .cw-grid{display:grid;grid-template-columns:46px repeat(7,1fr);position:relative}
 .cw-hour{height:44px;border-bottom:1px solid var(--line);font-size:10px;color:var(--dim);text-align:right;padding-right:6px;font-variant-numeric:tabular-nums;transform:translateY(-6px)}
 .cw-col{border-left:1px solid var(--line);position:relative}
@@ -320,6 +320,37 @@ input,select,textarea{font:inherit;color:inherit}
 .filerow{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper);font-size:13.5px}
 .filerow .fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--acc);font-weight:600;cursor:pointer}
 .notice{font-size:13px;color:var(--mut);padding:10px 14px;background:var(--paper);border-radius:10px}
+/* ---------- touch-device fixes ---------- */
+/* iOS keeps :hover applied after a tap — neutralise the lift/tint styles on
+   touch screens (each control has its own :active feedback) */
+@media(hover:none){
+  .quickbtn:hover{transform:none;box-shadow:var(--sh-1);border-color:var(--line)}
+  .cal-ev:hover{transform:none;box-shadow:none}
+  .rw-chip:hover{transform:none;box-shadow:none}
+  .listnote:hover{transform:none;border-color:var(--line);box-shadow:none}
+  .btn-sec:hover{border-color:var(--line-2);background:var(--card)}
+  .btn-pri:hover{background:var(--acc)}
+  .btn-dark:hover{background:var(--ink)}
+  .btn-ghost:hover{background:transparent;color:var(--mut)}
+  .btn-danger:hover{background:transparent}
+  .iconbtn:hover{background:transparent;color:var(--mut)}
+  .hdr-tab:hover:not(.on){background:transparent;color:var(--mut)}
+  .checkrow:hover,.radiorow:hover{background:transparent}
+  .pin-key:hover{background:var(--paper)}
+  .pin-key.ghostkey:hover{background:transparent}
+  /* the scrim blur triggers iOS's detached-fixed-layer bug when the page moves */
+  .scrim{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(20,24,29,.5)}
+}
+/* no grey iOS tap-flash over cards that have their own feedback */
+.btn,.iconbtn,.cal-ev,.cw-ev,.listnote,.rw-chip,.quickbtn,.pin-key,.stat,.checkrow,.radiorow,.bnav-btn,.hdr-tab,.agenda-day{-webkit-tap-highlight-color:transparent}
+/* long URLs, tokens and email addresses must wrap, never widen the page */
+.note-read p,.notice,.t-cap{overflow-wrap:anywhere}
+/* landscape notch: keep content and the bottom nav out of the ears */
+.bnav{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+@media(max-width:640px){
+  .wrap{padding-left:max(16px, env(safe-area-inset-left));padding-right:max(16px, env(safe-area-inset-right))}
+}
+
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
 }
@@ -338,7 +369,7 @@ var BUCKET = 'ac-files';
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260824100342';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260824100904';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -815,16 +846,38 @@ function sendPush(workerIds, title, body){
 }
 
 /* ================= toasts & confirm ================= */
+/* keep toasts visible above the iOS on-screen keyboard */
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', function(){
+    var t = document.getElementById('toasts');
+    if (!t) return;
+    var off = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+    t.style.transform = 'translateX(-50%) translateY(-' + Math.max(0, off) + 'px)';
+  });
+}
 function toast(msg, isErr){
   var t = el('div', { 'class': 'toast' + (isErr ? ' err' : '') }, msg);
   document.getElementById('toasts').appendChild(t);
   setTimeout(function(){ t.style.transition = 'opacity .25s'; t.style.opacity = '0';
     setTimeout(function(){ t.remove(); }, 260); }, 2600);
 }
+/* iOS ignores overflow:hidden on body for touch scrolling — the page kept
+   scrolling behind open sheets and Safari's keyboard auto-scroll dragged it
+   around. position:fixed is the lock that actually holds on iOS. */
+function lockBody(){
+  if (document.body.style.position === 'fixed') return;
+  rt.lockY = window.scrollY || 0;
+  document.body.style.cssText = 'position:fixed;top:-' + rt.lockY + 'px;left:0;right:0;overflow:hidden';
+}
+function unlockBody(){
+  if (document.body.style.position !== 'fixed') return;
+  document.body.style.cssText = '';
+  window.scrollTo(0, rt.lockY || 0);
+}
 function closeModal(){
   var m = document.getElementById('ac-modal');
   if (m) m.remove();
-  document.body.style.overflow = '';
+  if (!document.getElementById('ac-modal') && !document.getElementById('ac-confirm')) unlockBody();
   if (rt.upd) { location.reload(); return; }
   if (rt.pending) scheduleLive();
 }
@@ -833,13 +886,13 @@ function openModal(node, opts){
   opts = opts || {};
   var scrim = el('div', { 'class': 'scrim', id: 'ac-modal', onclick: function(e){ if (e.target === scrim && !opts.noDismiss) closeModal(); } }, node);
   document.body.appendChild(scrim);
-  document.body.style.overflow = 'hidden';
+  lockBody();
 }
 /* confirm stacks ON TOP of any open modal so Cancel never destroys an editor */
 function confirmDlg(title, body, okLabel, cb, danger){
   var old = document.getElementById('ac-confirm');
   if (old) old.remove();
-  function closeConfirm(){ var c = document.getElementById('ac-confirm'); if (c) c.remove(); if (!document.getElementById('ac-modal')) document.body.style.overflow = ''; }
+  function closeConfirm(){ var c = document.getElementById('ac-confirm'); if (c) c.remove(); if (!document.getElementById('ac-modal')) unlockBody(); }
   var m = el('div', { 'class': 'modal', style: 'max-width:400px' }, [
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, el('div', { 'class': 't-title' }, title)),
@@ -852,7 +905,7 @@ function confirmDlg(title, body, okLabel, cb, danger){
   ]);
   var scrim = el('div', { 'class': 'scrim', id: 'ac-confirm', style: 'z-index:150', onclick: function(e){ if (e.target === scrim) closeConfirm(); } }, m);
   document.body.appendChild(scrim);
-  document.body.style.overflow = 'hidden';
+  lockBody();
 }
 function busyBtn(btn, on){
   if (on) { btn.dataset.txt = btn.textContent; btn.textContent = 'Saving…'; btn.disabled = true; }
@@ -2541,7 +2594,7 @@ function openAdminShift(s){
   if (w) {
     body.appendChild(el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:14px' }, [
       el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),
-      el('div', { style: 'flex:1' }, [ el('b', null, w.name), el('div', { 'class': 't-cap' }, w.email) ])
+      el('div', { style: 'flex:1;min-width:0' }, [ el('b', null, w.name), el('div', { 'class': 't-cap' }, w.email) ])
     ]));
   } else {
     body.appendChild(el('div', { 'class': 'banner warn', style: 'margin-bottom:14px' }, [
@@ -2780,7 +2833,7 @@ function openSendRoster(){
         el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),
         el('div', { style: 'flex:1' }, [ el('b', null, w.name), el('div', { 'class': 't-cap' }, perWorker[w.id].length + ' shift' + (perWorker[w.id].length === 1 ? '' : 's')) ])
       ]),
-      el('div', { 'class': 'notice', style: 'white-space:pre-wrap;font-size:12.5px;max-height:120px;overflow:auto' }, msg),
+      el('div', { 'class': 'notice', style: 'white-space:pre-wrap;font-size:12.5px;max-height:120px;overflow:auto;overscroll-behavior:contain' }, msg),
       el('div', { style: 'display:flex;gap:8px;margin-top:10px' }, [
         el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(e){
           var b = e.currentTarget;
@@ -2997,7 +3050,7 @@ function viewAdminAvail(main){
     missing.forEach(function(w){
       box.appendChild(el('div', { 'class': 'rowline' }, [
         el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),
-        el('div', { style: 'flex:1' }, [ el('b', { style: 'font-size:14px' }, w.name), el('div', { 'class': 't-cap' }, w.email) ]),
+        el('div', { style: 'flex:1;min-width:0' }, [ el('b', { style: 'font-size:14px' }, w.name), el('div', { 'class': 't-cap' }, w.email) ]),
         el('button', { 'class': 'btn btn-sm btn-sec', disabled: !!ui.nudged[w.id], onclick: function(e){
           if (ui.nudged[w.id]) return;
           var b = e.currentTarget;
@@ -3363,7 +3416,7 @@ function openRates(w){
   function rateField(label, key, hint){
     return el('div', { 'class': 'field' }, [
       el('label', null, label),
-      el('input', { 'class': 'inp t-num', type: 'number', step: '0.01', min: '0', value: String(r[key]), oninput: function(e){ r[key] = parseFloat(e.target.value) || 0; } }),
+      el('input', { 'class': 'inp t-num', type: 'number', inputmode: 'decimal', step: '0.01', min: '0', value: String(r[key]), oninput: function(e){ r[key] = parseFloat(e.target.value) || 0; } }),
       hint ? el('div', { 'class': 'hint' }, hint) : null
     ]);
   }

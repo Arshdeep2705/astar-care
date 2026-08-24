@@ -190,7 +190,7 @@ function viewAdminAvail(main){
     missing.forEach(function(w){
       box.appendChild(el('div', { 'class': 'rowline' }, [
         el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),
-        el('div', { style: 'flex:1' }, [ el('b', { style: 'font-size:14px' }, w.name), el('div', { 'class': 't-cap' }, w.email) ]),
+        el('div', { style: 'flex:1;min-width:0' }, [ el('b', { style: 'font-size:14px' }, w.name), el('div', { 'class': 't-cap' }, w.email) ]),
         el('button', { 'class': 'btn btn-sm btn-sec', disabled: !!ui.nudged[w.id], onclick: function(e){
           if (ui.nudged[w.id]) return;
           var b = e.currentTarget;
@@ -556,7 +556,7 @@ function openRates(w){
   function rateField(label, key, hint){
     return el('div', { 'class': 'field' }, [
       el('label', null, label),
-      el('input', { 'class': 'inp t-num', type: 'number', step: '0.01', min: '0', value: String(r[key]), oninput: function(e){ r[key] = parseFloat(e.target.value) || 0; } }),
+      el('input', { 'class': 'inp t-num', type: 'number', inputmode: 'decimal', step: '0.01', min: '0', value: String(r[key]), oninput: function(e){ r[key] = parseFloat(e.target.value) || 0; } }),
       hint ? el('div', { 'class': 'hint' }, hint) : null
     ]);
   }

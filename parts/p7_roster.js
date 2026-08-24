@@ -335,7 +335,7 @@ function openAdminShift(s){
   if (w) {
     body.appendChild(el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:14px' }, [
       el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),
-      el('div', { style: 'flex:1' }, [ el('b', null, w.name), el('div', { 'class': 't-cap' }, w.email) ])
+      el('div', { style: 'flex:1;min-width:0' }, [ el('b', null, w.name), el('div', { 'class': 't-cap' }, w.email) ])
     ]));
   } else {
     body.appendChild(el('div', { 'class': 'banner warn', style: 'margin-bottom:14px' }, [
@@ -574,7 +574,7 @@ function openSendRoster(){
         el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),
         el('div', { style: 'flex:1' }, [ el('b', null, w.name), el('div', { 'class': 't-cap' }, perWorker[w.id].length + ' shift' + (perWorker[w.id].length === 1 ? '' : 's')) ])
       ]),
-      el('div', { 'class': 'notice', style: 'white-space:pre-wrap;font-size:12.5px;max-height:120px;overflow:auto' }, msg),
+      el('div', { 'class': 'notice', style: 'white-space:pre-wrap;font-size:12.5px;max-height:120px;overflow:auto;overscroll-behavior:contain' }, msg),
       el('div', { style: 'display:flex;gap:8px;margin-top:10px' }, [
         el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(e){
           var b = e.currentTarget;
