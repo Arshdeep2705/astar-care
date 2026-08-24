@@ -82,7 +82,9 @@ input,select,textarea{font:inherit;color:inherit}
 @media(max-width:900px){ .hdr-tabs{display:none} }
 
 /* ---------- bottom nav (mobile) ---------- */
-.bnav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,254,253,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);display:none;padding-bottom:var(--sab)}
+/* solid background + own compositor layer: iOS detaches fixed elements that
+   use backdrop-filter during scroll, painting them mid-page */
+.bnav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--card);border-top:1px solid var(--line);display:none;padding-bottom:var(--sab);transform:translateZ(0)}
 .bnav-in{display:flex;justify-content:space-around}
 .bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px 7px;font-size:10.5px;font-weight:600;color:var(--dim);min-height:56px;transition:color .15s var(--ease)}
 .bnav-btn svg{width:22px;height:22px}
@@ -167,7 +169,7 @@ input,select,textarea{font:inherit;color:inherit}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 @media(max-width:640px){
   .scrim{align-items:flex-end;padding:0}
-  .modal{max-width:none;border-radius:20px 20px 0 0;max-height:94dvh;animation:sheetup .22s var(--ease)}
+  .modal{max-width:none;border-radius:20px 20px 0 0;max-height:94vh;max-height:94dvh;animation:sheetup .22s var(--ease)}
   .modal-head{padding:16px 18px 8px}
   .modal-body{padding:6px 18px 16px}
   .modal-foot{padding:12px 18px calc(14px + var(--sab))}
