@@ -364,12 +364,11 @@ input,select,textarea{font:inherit;color:inherit}
 /* ================= config ================= */
 var SB_URL = 'https://pbiafthhnvvpxaxcvaso.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiaWFmdGhobnZ2cHhheGN2YXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NjUwNzgsImV4cCI6MjEwMzA0MTA3OH0.CgGhHsay9lkyHkmaM5pB4eah8auXOv70KtzXUEl_010';
-var ADMIN_PIN = '9999';
-var BUCKET = 'ac-files';
+var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login function)
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260825101120';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260825102501';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -526,18 +525,42 @@ function haversine(lat1, lng1, lat2, lng2) {
 }
 
 /* ================= Supabase fetch wrappers ================= */
-function sbHeaders(extra) {
-  var h = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
+/* every request runs as the signed-in user — that's what makes the strict
+   database rules (workers see only their own world) actually hold */
+function authToken(){ return (state.auth && state.auth.token) || SB_KEY; }
+function sbHeaders(extra, token) {
+  var h = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + (token || authToken()), 'Content-Type': 'application/json' };
   if (extra) for (var k in extra) h[k] = extra[k];
   return h;
+}
+function sbRefreshSession(){
+  if (!state.auth || !state.auth.refresh) return Promise.resolve(false);
+  return fetch(SB_URL + '/auth/v1/token?grant_type=refresh_token', {
+    method: 'POST', headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: state.auth.refresh })
+  }).then(function(r){ return r.json().then(function(j){
+    if (!r.ok || !j.access_token) return false;
+    state.auth.token = j.access_token;
+    state.auth.refresh = j.refresh_token || state.auth.refresh;
+    saveSession();
+    return true;
+  }); })["catch"](function(){ return false; });
 }
 function sbFetch(path, opts) {
   opts = opts || {};
   return fetch(SB_URL + path, {
     method: opts.method || 'GET',
-    headers: sbHeaders(opts.headers),
+    headers: sbHeaders(opts.headers, opts.token),
     body: opts.body != null ? JSON.stringify(opts.body) : undefined
   }).then(function(res){
+    if (res.status === 401 && state.auth && state.auth.refresh && !opts.token && !opts._retried) {
+      // expired access token: refresh once and retry, else back to sign-in
+      return sbRefreshSession().then(function(ok){
+        if (!ok) { signOut(); throw new Error('Session expired — please sign in again.'); }
+        opts._retried = true;
+        return sbFetch(path, opts);
+      });
+    }
     if (res.status === 204) return null;
     return res.text().then(function(txt){
       var j = null; try { j = txt ? JSON.parse(txt) : null; } catch(e){}
@@ -588,7 +611,7 @@ function sbRecover(email){
 function storageUpload(path, file){
   return fetch(SB_URL + '/storage/v1/object/' + BUCKET + '/' + path, {
     method:'POST',
-    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' },
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + authToken(), 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' },
     body: file
   }).then(function(res){ return res.text().then(function(t){ if(!res.ok){ var j=null; try{j=JSON.parse(t)}catch(e){}; throw new Error((j&&(j.message||j.error))||'Upload failed'); } return path; }); });
 }
@@ -750,6 +773,7 @@ function startRealtime(){
   if (!rt.poll) {
     rt.poll = setInterval(scheduleLive, 60000);  // fallback if the socket ever drops
     setInterval(checkVersion, 300000);
+    setInterval(sbRefreshSession, 1800000);      // keep the session fresh (tokens last 1 h)
     document.addEventListener('visibilitychange', function(){ if (!document.hidden) { scheduleLive(); checkVersion(); } });
     // a refresh deferred because a field had focus runs as soon as focus leaves it
     document.addEventListener('focusout', function(){
@@ -763,7 +787,7 @@ function startRealtime(){
     rt.ws = ws;
     ws.onopen = function(){
       ws.send(JSON.stringify({ topic: 'realtime:ac-live', event: 'phx_join', ref: '1',
-        payload: { config: { postgres_changes: [{ event: '*', schema: 'public' }] } } }));
+        payload: { access_token: authToken(), config: { postgres_changes: [{ event: '*', schema: 'public' }] } } }));
       rt.hb = setInterval(function(){
         try { ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', ref: 'hb', payload: {} })); } catch (e) {}
       }, 25000);
@@ -842,12 +866,17 @@ function enablePush(){
    own actions (admin portal or worker preview) */
 function notifyAdmins(title, body){
   if (isAdmin() || state.preview) return;
-  sendPush(adminIds(), title, body);
+  sendPush('admins', title, body);   // the push function resolves admin devices server-side
 }
-/* fire-and-forget: never block the action on the notification */
-function sendPush(workerIds, title, body){
-  if (!workerIds || !workerIds.length) return Promise.resolve(null);
-  return sbFetch('/functions/v1/push', { method: 'POST', body: { worker_ids: workerIds, title: title, body: (body || '').slice(0, 240), url: '/' } })
+/* fire-and-forget: never block the action on the notification.
+   target: 'admins' or an array of worker ids (worker ids are admin-only,
+   enforced server-side). */
+function sendPush(target, title, body){
+  var payload = { title: title, body: (body || '').slice(0, 240), url: '/' };
+  if (target === 'admins') payload.to_admins = true;
+  else if (Array.isArray(target) && target.length) payload.worker_ids = target;
+  else return Promise.resolve(null);
+  return sbFetch('/functions/v1/push', { method: 'POST', body: payload })
     ["catch"](function(){ return null; });
 }
 
@@ -993,21 +1022,27 @@ function renderSignin(app){
 }
 
 function pinInput(k){
+  if (state.pinBusy) return;
   if (k === 'del') state.pin = state.pin.slice(0, -1);
   else if (state.pin.length < 4) state.pin += k;
   if (state.pin.length === 4) {
-    if (state.pin === ADMIN_PIN) {
-      state.pin = '';
-      state.auth = { mode: 'admin' };
-      saveSession();
-      render(); loadAll().then(render);
-      return;
-    }
-    // wrong pin: shake + clear
+    // the PIN is verified server-side; a correct PIN returns a real admin session
+    var pin = state.pin;
+    state.pinBusy = true;
     render();
-    var card = document.querySelector('.auth-card');
-    if (card) card.classList.add('shake');
-    setTimeout(function(){ state.pin = ''; render(); }, 420);
+    sbFetch('/functions/v1/admin-login', { method: 'POST', body: { pin: pin }, token: SB_KEY })
+      .then(function(s){
+        state.pinBusy = false; state.pin = '';
+        state.auth = { mode: 'admin', token: s.access_token, refresh: s.refresh_token };
+        saveSession();
+        render(); loadAll().then(render);
+      })
+      ["catch"](function(){
+        state.pinBusy = false;
+        var card = document.querySelector('.auth-card');
+        if (card) card.classList.add('shake');
+        setTimeout(function(){ state.pin = ''; render(); }, 420);
+      });
     return;
   }
   render();
@@ -1025,15 +1060,15 @@ function doWorkerLogin(form){
   btn.disabled = true; btn.textContent = 'Signing in…';
   var errBox = document.getElementById('login-err');
   sbLogin(email, pass).then(function(sess){
-    return sbSel('ac_workers', 'select=*&email=eq.' + encodeURIComponent(email)).then(function(rows){
+    return sbFetch('/rest/v1/ac_workers?select=*&email=eq.' + encodeURIComponent(email), { token: sess.access_token }).then(function(rows){
       var w = rows[0];
       if (!w) throw new Error('No worker record found for this email. Ask the office to add you.');
       if (w.must_change_password) {
-        state.pwChange = { token: sess.access_token, workerId: w.id, name: w.name };
+        state.pwChange = { token: sess.access_token, refresh: sess.refresh_token, workerId: w.id, name: w.name };
         render();
         return;
       }
-      state.auth = { mode: 'worker', workerId: w.id, token: sess.access_token };
+      state.auth = { mode: 'worker', workerId: w.id, token: sess.access_token, refresh: sess.refresh_token };
       saveSession();
       state.view = 'home';
       render(); loadAll().then(render);
@@ -1076,9 +1111,10 @@ function doSetPassword(form){
   btn.disabled = true; btn.textContent = 'Saving…';
   var pc = state.pwChange;
   sbSetPassword(pc.token, p1).then(function(){
+    // become the signed-in worker first so the update runs as them
+    state.auth = { mode: 'worker', workerId: pc.workerId, token: pc.token, refresh: pc.refresh };
     return sbUpd('ac_workers', 'id=eq.' + pc.workerId, { must_change_password: false });
   }).then(function(){
-    state.auth = { mode: 'worker', workerId: pc.workerId, token: pc.token };
     state.pwChange = null;
     saveSession();
     state.view = 'home';
@@ -3485,8 +3521,8 @@ window.addEventListener('resize', (function(){
 
 (function boot(){
   var saved = loadSession();
-  // only restore a session that belongs to THIS portal
-  if (saved && ((PORTAL === 'admin' && saved.mode === 'admin') || (PORTAL === 'worker' && saved.mode === 'worker'))) {
+  // only restore a session that belongs to THIS portal and has real tokens
+  if (saved && saved.token && ((PORTAL === 'admin' && saved.mode === 'admin') || (PORTAL === 'worker' && saved.mode === 'worker'))) {
     state.auth = saved;
   }
   render();

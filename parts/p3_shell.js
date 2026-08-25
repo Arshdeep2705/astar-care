@@ -74,21 +74,27 @@ function renderSignin(app){
 }
 
 function pinInput(k){
+  if (state.pinBusy) return;
   if (k === 'del') state.pin = state.pin.slice(0, -1);
   else if (state.pin.length < 4) state.pin += k;
   if (state.pin.length === 4) {
-    if (state.pin === ADMIN_PIN) {
-      state.pin = '';
-      state.auth = { mode: 'admin' };
-      saveSession();
-      render(); loadAll().then(render);
-      return;
-    }
-    // wrong pin: shake + clear
+    // the PIN is verified server-side; a correct PIN returns a real admin session
+    var pin = state.pin;
+    state.pinBusy = true;
     render();
-    var card = document.querySelector('.auth-card');
-    if (card) card.classList.add('shake');
-    setTimeout(function(){ state.pin = ''; render(); }, 420);
+    sbFetch('/functions/v1/admin-login', { method: 'POST', body: { pin: pin }, token: SB_KEY })
+      .then(function(s){
+        state.pinBusy = false; state.pin = '';
+        state.auth = { mode: 'admin', token: s.access_token, refresh: s.refresh_token };
+        saveSession();
+        render(); loadAll().then(render);
+      })
+      ["catch"](function(){
+        state.pinBusy = false;
+        var card = document.querySelector('.auth-card');
+        if (card) card.classList.add('shake');
+        setTimeout(function(){ state.pin = ''; render(); }, 420);
+      });
     return;
   }
   render();
@@ -106,15 +112,15 @@ function doWorkerLogin(form){
   btn.disabled = true; btn.textContent = 'Signing in…';
   var errBox = document.getElementById('login-err');
   sbLogin(email, pass).then(function(sess){
-    return sbSel('ac_workers', 'select=*&email=eq.' + encodeURIComponent(email)).then(function(rows){
+    return sbFetch('/rest/v1/ac_workers?select=*&email=eq.' + encodeURIComponent(email), { token: sess.access_token }).then(function(rows){
       var w = rows[0];
       if (!w) throw new Error('No worker record found for this email. Ask the office to add you.');
       if (w.must_change_password) {
-        state.pwChange = { token: sess.access_token, workerId: w.id, name: w.name };
+        state.pwChange = { token: sess.access_token, refresh: sess.refresh_token, workerId: w.id, name: w.name };
         render();
         return;
       }
-      state.auth = { mode: 'worker', workerId: w.id, token: sess.access_token };
+      state.auth = { mode: 'worker', workerId: w.id, token: sess.access_token, refresh: sess.refresh_token };
       saveSession();
       state.view = 'home';
       render(); loadAll().then(render);
@@ -157,9 +163,10 @@ function doSetPassword(form){
   btn.disabled = true; btn.textContent = 'Saving…';
   var pc = state.pwChange;
   sbSetPassword(pc.token, p1).then(function(){
+    // become the signed-in worker first so the update runs as them
+    state.auth = { mode: 'worker', workerId: pc.workerId, token: pc.token, refresh: pc.refresh };
     return sbUpd('ac_workers', 'id=eq.' + pc.workerId, { must_change_password: false });
   }).then(function(){
-    state.auth = { mode: 'worker', workerId: pc.workerId, token: pc.token };
     state.pwChange = null;
     saveSession();
     state.view = 'home';

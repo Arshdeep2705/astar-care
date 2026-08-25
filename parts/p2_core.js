@@ -2,8 +2,7 @@
 /* ================= config ================= */
 var SB_URL = 'https://pbiafthhnvvpxaxcvaso.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiaWFmdGhobnZ2cHhheGN2YXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NjUwNzgsImV4cCI6MjEwMzA0MTA3OH0.CgGhHsay9lkyHkmaM5pB4eah8auXOv70KtzXUEl_010';
-var ADMIN_PIN = '9999';
-var BUCKET = 'ac-files';
+var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login function)
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
@@ -164,18 +163,42 @@ function haversine(lat1, lng1, lat2, lng2) {
 }
 
 /* ================= Supabase fetch wrappers ================= */
-function sbHeaders(extra) {
-  var h = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
+/* every request runs as the signed-in user — that's what makes the strict
+   database rules (workers see only their own world) actually hold */
+function authToken(){ return (state.auth && state.auth.token) || SB_KEY; }
+function sbHeaders(extra, token) {
+  var h = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + (token || authToken()), 'Content-Type': 'application/json' };
   if (extra) for (var k in extra) h[k] = extra[k];
   return h;
+}
+function sbRefreshSession(){
+  if (!state.auth || !state.auth.refresh) return Promise.resolve(false);
+  return fetch(SB_URL + '/auth/v1/token?grant_type=refresh_token', {
+    method: 'POST', headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: state.auth.refresh })
+  }).then(function(r){ return r.json().then(function(j){
+    if (!r.ok || !j.access_token) return false;
+    state.auth.token = j.access_token;
+    state.auth.refresh = j.refresh_token || state.auth.refresh;
+    saveSession();
+    return true;
+  }); })["catch"](function(){ return false; });
 }
 function sbFetch(path, opts) {
   opts = opts || {};
   return fetch(SB_URL + path, {
     method: opts.method || 'GET',
-    headers: sbHeaders(opts.headers),
+    headers: sbHeaders(opts.headers, opts.token),
     body: opts.body != null ? JSON.stringify(opts.body) : undefined
   }).then(function(res){
+    if (res.status === 401 && state.auth && state.auth.refresh && !opts.token && !opts._retried) {
+      // expired access token: refresh once and retry, else back to sign-in
+      return sbRefreshSession().then(function(ok){
+        if (!ok) { signOut(); throw new Error('Session expired — please sign in again.'); }
+        opts._retried = true;
+        return sbFetch(path, opts);
+      });
+    }
     if (res.status === 204) return null;
     return res.text().then(function(txt){
       var j = null; try { j = txt ? JSON.parse(txt) : null; } catch(e){}
@@ -226,7 +249,7 @@ function sbRecover(email){
 function storageUpload(path, file){
   return fetch(SB_URL + '/storage/v1/object/' + BUCKET + '/' + path, {
     method:'POST',
-    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' },
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + authToken(), 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' },
     body: file
   }).then(function(res){ return res.text().then(function(t){ if(!res.ok){ var j=null; try{j=JSON.parse(t)}catch(e){}; throw new Error((j&&(j.message||j.error))||'Upload failed'); } return path; }); });
 }
@@ -388,6 +411,7 @@ function startRealtime(){
   if (!rt.poll) {
     rt.poll = setInterval(scheduleLive, 60000);  // fallback if the socket ever drops
     setInterval(checkVersion, 300000);
+    setInterval(sbRefreshSession, 1800000);      // keep the session fresh (tokens last 1 h)
     document.addEventListener('visibilitychange', function(){ if (!document.hidden) { scheduleLive(); checkVersion(); } });
     // a refresh deferred because a field had focus runs as soon as focus leaves it
     document.addEventListener('focusout', function(){
@@ -401,7 +425,7 @@ function startRealtime(){
     rt.ws = ws;
     ws.onopen = function(){
       ws.send(JSON.stringify({ topic: 'realtime:ac-live', event: 'phx_join', ref: '1',
-        payload: { config: { postgres_changes: [{ event: '*', schema: 'public' }] } } }));
+        payload: { access_token: authToken(), config: { postgres_changes: [{ event: '*', schema: 'public' }] } } }));
       rt.hb = setInterval(function(){
         try { ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', ref: 'hb', payload: {} })); } catch (e) {}
       }, 25000);
@@ -480,12 +504,17 @@ function enablePush(){
    own actions (admin portal or worker preview) */
 function notifyAdmins(title, body){
   if (isAdmin() || state.preview) return;
-  sendPush(adminIds(), title, body);
+  sendPush('admins', title, body);   // the push function resolves admin devices server-side
 }
-/* fire-and-forget: never block the action on the notification */
-function sendPush(workerIds, title, body){
-  if (!workerIds || !workerIds.length) return Promise.resolve(null);
-  return sbFetch('/functions/v1/push', { method: 'POST', body: { worker_ids: workerIds, title: title, body: (body || '').slice(0, 240), url: '/' } })
+/* fire-and-forget: never block the action on the notification.
+   target: 'admins' or an array of worker ids (worker ids are admin-only,
+   enforced server-side). */
+function sendPush(target, title, body){
+  var payload = { title: title, body: (body || '').slice(0, 240), url: '/' };
+  if (target === 'admins') payload.to_admins = true;
+  else if (Array.isArray(target) && target.length) payload.worker_ids = target;
+  else return Promise.resolve(null);
+  return sbFetch('/functions/v1/push', { method: 'POST', body: payload })
     ["catch"](function(){ return null; });
 }
 
