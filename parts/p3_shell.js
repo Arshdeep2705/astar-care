@@ -162,8 +162,30 @@ function doSetPassword(form){
   var btn = form.querySelector('button[type=submit]');
   btn.disabled = true; btn.textContent = 'Saving…';
   var pc = state.pwChange;
-  sbSetPassword(pc.token, p1).then(function(){
-    // become the signed-in worker first so the update runs as them
+  function refreshPc(){
+    // the worker may have sat on this screen for over an hour — renew first
+    return fetch(SB_URL + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST', headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: pc.refresh })
+    }).then(function(r){ return r.json(); }).then(function(j){
+      if (!j.access_token) throw new Error('Your sign-in expired — reload the app and sign in again.');
+      pc.token = j.access_token; pc.refresh = j.refresh_token || pc.refresh;
+    });
+  }
+  var setP = pc.pwDone ? Promise.resolve() :
+    sbSetPassword(pc.token, p1).then(function(){ pc.pwDone = true; })
+      ["catch"](function(e){
+        // retry after a half-failed attempt: the password IS already set
+        if (/different from the old/i.test(e.message || '')) { pc.pwDone = true; return; }
+        if (/jwt|expired|invalid token/i.test(e.message || '') && pc.refresh) {
+          return refreshPc().then(function(){
+            return sbSetPassword(pc.token, p1).then(function(){ pc.pwDone = true; });
+          });
+        }
+        throw e;
+      });
+  setP.then(function(){
+    // become the signed-in worker so the flag update runs as them
     state.auth = { mode: 'worker', workerId: pc.workerId, token: pc.token, refresh: pc.refresh };
     return sbUpd('ac_workers', 'id=eq.' + pc.workerId, { must_change_password: false });
   }).then(function(){
@@ -172,6 +194,7 @@ function doSetPassword(form){
     state.view = 'home';
     render(); loadAll().then(render);
   })["catch"](function(e){
+    state.auth = null;
     btn.disabled = false; btn.textContent = 'Save and continue';
     fail(e.message);
   });

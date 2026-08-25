@@ -171,19 +171,45 @@ function sbHeaders(extra, token) {
   if (extra) for (var k in extra) h[k] = extra[k];
   return h;
 }
+/* returns true (renewed), false (session truly dead), or 'retry' (transient
+   network trouble — keep the session, try later). Single-flight so 13
+   parallel 401s burn ONE refresh token, and multi-tab safe: if another tab
+   already rotated the token we adopt it instead of re-using a consumed one. */
+var _refreshing = null;
 function sbRefreshSession(){
+  if (_refreshing) return _refreshing;
   if (!state.auth || !state.auth.refresh) return Promise.resolve(false);
-  return fetch(SB_URL + '/auth/v1/token?grant_type=refresh_token', {
+  var stored = loadSession();
+  if (stored && stored.token && stored.refresh && stored.token !== state.auth.token) {
+    state.auth.token = stored.token;
+    state.auth.refresh = stored.refresh;
+    return Promise.resolve(true);
+  }
+  var p = fetch(SB_URL + '/auth/v1/token?grant_type=refresh_token', {
     method: 'POST', headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh_token: state.auth.refresh })
-  }).then(function(r){ return r.json().then(function(j){
-    if (!r.ok || !j.access_token) return false;
-    state.auth.token = j.access_token;
-    state.auth.refresh = j.refresh_token || state.auth.refresh;
-    saveSession();
-    return true;
-  }); })["catch"](function(){ return false; });
+  }).then(function(r){
+    if (r.status === 400 || r.status === 401) return false;      // revoked/invalid: dead
+    return r.json().then(function(j){
+      if (!r.ok || !j.access_token) return 'retry';              // 5xx / odd body: transient
+      state.auth.token = j.access_token;
+      state.auth.refresh = j.refresh_token || state.auth.refresh;
+      saveSession();
+      return true;
+    })["catch"](function(){ return 'retry'; });
+  })["catch"](function(){ return 'retry'; });
+  _refreshing = p.then(function(v){ _refreshing = null; return v; }, function(e){ _refreshing = null; throw e; });
+  return _refreshing;
 }
+/* another tab rotated the session — pick it up live */
+window.addEventListener('storage', function(e){
+  if (e.key === 'ac_session_' + PORTAL && state.auth && e.newValue) {
+    try {
+      var s = JSON.parse(e.newValue);
+      if (s && s.token && s.refresh) { state.auth.token = s.token; state.auth.refresh = s.refresh; }
+    } catch(err){}
+  }
+});
 function sbFetch(path, opts) {
   opts = opts || {};
   return fetch(SB_URL + path, {
@@ -192,11 +218,12 @@ function sbFetch(path, opts) {
     body: opts.body != null ? JSON.stringify(opts.body) : undefined
   }).then(function(res){
     if (res.status === 401 && state.auth && state.auth.refresh && !opts.token && !opts._retried) {
-      // expired access token: refresh once and retry, else back to sign-in
+      // expired access token: refresh once and retry; dead session → sign-in;
+      // transient network trouble → keep the session and surface a soft error
       return sbRefreshSession().then(function(ok){
-        if (!ok) { signOut(); throw new Error('Session expired — please sign in again.'); }
-        opts._retried = true;
-        return sbFetch(path, opts);
+        if (ok === true) { opts._retried = true; return sbFetch(path, opts); }
+        if (ok === false) { signOut(); throw new Error('Session expired — please sign in again.'); }
+        throw new Error('Connection hiccup — please try again.');
       });
     }
     if (res.status === 204) return null;
@@ -246,12 +273,22 @@ function sbRecover(email){
   return sbFetch('/auth/v1/recover', { method:'POST', body:{ email: email } });
 }
 /* storage */
-function storageUpload(path, file){
+function storageUpload(path, file, _retried){
   return fetch(SB_URL + '/storage/v1/object/' + BUCKET + '/' + path, {
     method:'POST',
     headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + authToken(), 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' },
     body: file
-  }).then(function(res){ return res.text().then(function(t){ if(!res.ok){ var j=null; try{j=JSON.parse(t)}catch(e){}; throw new Error((j&&(j.message||j.error))||'Upload failed'); } return path; }); });
+  }).then(function(res){ return res.text().then(function(t){
+    if (res.status === 401 && !_retried && state.auth && state.auth.refresh) {
+      // stale token (e.g. app was backgrounded): renew and retry once
+      return sbRefreshSession().then(function(ok){
+        if (ok === true) return storageUpload(path, file, true);
+        throw new Error('Upload failed — check your connection and try again.');
+      });
+    }
+    if(!res.ok){ var j=null; try{j=JSON.parse(t)}catch(e){}; throw new Error((j&&(j.message||j.error))||'Upload failed'); }
+    return path;
+  }); });
 }
 function storageSignedUrl(path){
   return sbFetch('/storage/v1/object/sign/' + BUCKET + '/' + path, { method:'POST', body:{ expiresIn: 3600 } })
@@ -410,6 +447,7 @@ function checkVersion(){
     })["catch"](function(){});
 }
 function startRealtime(){
+  if (!state.auth) return;   // a queued reconnect must not outlive sign-out
   if (!rt.poll) {
     rt.poll = setInterval(scheduleLive, 60000);  // fallback if the socket ever drops
     setInterval(checkVersion, 300000);
@@ -436,6 +474,10 @@ function startRealtime(){
       try {
         var m = JSON.parse(ev.data);
         if (m.event === 'postgres_changes') scheduleLive();
+        // a rejected join (e.g. expired token) must not leave a deaf socket
+        if (m.event === 'phx_reply' && m.ref === '1' && m.payload && m.payload.status === 'error') {
+          try { ws.close(); } catch (e) {}
+        }
       } catch (e) {}
     };
     ws.onclose = function(){

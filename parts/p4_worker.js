@@ -286,7 +286,11 @@ function clockBtn(s, w, kind){
             toast('Clocked ' + kind + (d == null ? '' : ' · ' + Math.round(d) + ' m from site'));
           }
         })
-        ["catch"](function(e){ btn.disabled = false; toast(e.message, true); });
+        ["catch"](function(e){
+          btn.disabled = false; btn.innerHTML = '';
+          appendKids(btn, [svgIcon(IC.clock), kind === 'in' ? 'Clock in' : 'Clock out']);
+          toast(e.message, true);
+        });
     }, function(err){
       btn.disabled = false; btn.innerHTML = ''; appendKids(btn, [svgIcon(IC.clock), kind === 'in' ? 'Clock in' : 'Clock out']);
       toast(err.code === 1 ? 'Location permission was denied — allow it in your browser to clock ' + kind + '.' : 'Could not get your location. Try again.', true);
@@ -430,7 +434,8 @@ function viewAvailability(main, w){
     busyBtn(flagBtn, true);
     sbIns('ac_flags', [{ kind: 'availability', worker_id: w.id, urgent: true, msg: msg }])
       .then(function(){
-        sendPush(adminIds(), 'Urgent from ' + firstName(w.name), msg);
+        // 'admins' resolves server-side — workers can't see admin ids under RLS
+        sendPush('admins', 'Urgent from ' + firstName(w.name), msg);
         ui.urgentMsg = ''; ta.value = ''; busyBtn(flagBtn, false); toast('Sent as urgent'); refresh();
       })
       ["catch"](function(e){ busyBtn(flagBtn, false); toast(e.message, true); });
