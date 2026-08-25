@@ -273,7 +273,12 @@ function clockBtn(s, w, kind){
       }
       sbIns('ac_clock', [{ shift_id: s.id, worker_id: w.id, kind: kind, at: new Date().toISOString(),
         lat: pos.coords.latitude, lng: pos.coords.longitude, distance_m: d == null ? null : Math.round(d) }])
-        .then(function(){ toast('Clocked ' + kind + (d == null ? '' : ' · ' + Math.round(d) + ' m from site')); closeModal(); refresh(); })
+        .then(function(){
+          var nw = new Date();
+          notifyAdmins(w.name + ' clocked ' + kind + ' — ' + (c ? c.name : ''),
+            fmtTime(pad2(nw.getHours()) + ':' + pad2(nw.getMinutes())) + (d == null ? '' : ' · ' + Math.round(d) + ' m from site'));
+          toast('Clocked ' + kind + (d == null ? '' : ' · ' + Math.round(d) + ' m from site')); closeModal(); refresh();
+        })
         ["catch"](function(e){ btn.disabled = false; toast(e.message, true); });
     }, function(err){
       btn.disabled = false; btn.innerHTML = ''; appendKids(btn, [svgIcon(IC.clock), kind === 'in' ? 'Clock in' : 'Clock out']);
@@ -374,7 +379,10 @@ function viewAvailability(main, w){
     var saveBtn = el('button', { 'class': 'btn btn-pri btn-big btn-block', style: 'margin-top:16px', onclick: function(){
       busyBtn(saveBtn, true);
       sbUpsert('ac_availability', [{ worker_id: w.id, week_start: nextMon, days: days, updated_at: new Date().toISOString() }], 'worker_id,week_start')
-        .then(function(){ ui.avail = null; toast('Availability submitted — thanks!'); refresh(); })
+        .then(function(){
+          notifyAdmins(firstName(w.name) + ' submitted availability', 'Week of ' + fmtDate(nextMon) + ' — open the Availability tab to see it.');
+          ui.avail = null; toast('Availability submitted — thanks!'); refresh();
+        })
         ["catch"](function(e){ busyBtn(saveBtn, false); toast(e.message, true); });
     } }, 'Submit availability');
     card.appendChild(el('p', { 'class': 't-cap', style: 'margin-top:12px' }, 'You can submit once — after that, any change goes to the office as a message below.'));

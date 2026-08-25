@@ -476,6 +476,12 @@ function enablePush(){
       });
   })["catch"](function(e){ toast('Could not turn on notifications: ' + e.message, true); return false; });
 }
+/* ping the admin's devices about a WORKER action — silent for the admin's
+   own actions (admin portal or worker preview) */
+function notifyAdmins(title, body){
+  if (isAdmin() || state.preview) return;
+  sendPush(adminIds(), title, body);
+}
 /* fire-and-forget: never block the action on the notification */
 function sendPush(workerIds, title, body){
   if (!workerIds || !workerIds.length) return Promise.resolve(null);

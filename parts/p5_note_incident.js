@@ -202,6 +202,10 @@ function openNoteModal(opts){
       }]);
     }).then(function(){
       if (removedPaths.length) storageDelete(removedPaths);
+      if (!editing) {
+        notifyAdmins('New note — ' + (client ? client.name : ''),
+          (worker ? worker.name : 'A worker') + ' added a ' + typeSel.value + (shift ? ' for ' + fmtDate(shift.date) : '') + '.');
+      }
       closeModal();
       toast(editing ? 'Note updated' : 'Note added');
       refresh();
@@ -400,6 +404,10 @@ function openIncidentModal(opts){
       return sbIns('ac_incident_forms', [rec]);
     }).then(function(){
       if (removedPaths.length) storageDelete(removedPaths);
+      if (!editing) {
+        notifyAdmins('Incident report — ' + (client ? client.name : ''),
+          (worker ? worker.name : 'A worker') + ': ' + f.ticket_desc.slice(0, 150));
+      }
       closeModal();
       toast(editing ? 'Incident report updated' : 'Incident report submitted');
       refresh();
