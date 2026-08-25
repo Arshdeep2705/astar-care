@@ -21,7 +21,7 @@ function renderLoadError(app){
     el('div', { 'class': 'card card-pad', style: 'max-width:440px;margin:60px auto;text-align:center' }, [
       el('div', { 'class': 't-title', style: 'margin-bottom:8px' }, "Couldn't reach the server"),
       el('p', { 'class': 't-mut', style: 'margin-bottom:16px' }, state.loadErr),
-      el('button', { 'class': 'btn btn-pri', onclick: function(){ state.loading = true; render(); refresh(); } }, 'Try again')
+      el('button', { 'class': 'btn btn-pri', onclick: function(){ location.reload(); } }, 'Try again')
     ])));
 }
 
