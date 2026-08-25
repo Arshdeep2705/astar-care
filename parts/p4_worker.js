@@ -277,7 +277,14 @@ function clockBtn(s, w, kind){
           var nw = new Date();
           notifyAdmins(w.name + ' clocked ' + kind + ' — ' + (c ? c.name : ''),
             fmtTime(pad2(nw.getHours()) + ':' + pad2(nw.getMinutes())) + (d == null ? '' : ' · ' + Math.round(d) + ' m from site'));
-          toast('Clocked ' + kind + (d == null ? '' : ' · ' + Math.round(d) + ' m from site')); closeModal(); refresh();
+          closeModal(); refresh();
+          if (kind === 'out' && notesForShift(s.id).length === 0) {
+            // the best moment to catch the note: right at clock-out
+            toast('Clocked out — write up the shift before you head off');
+            openNoteModal({ shift: s, worker: w });
+          } else {
+            toast('Clocked ' + kind + (d == null ? '' : ' · ' + Math.round(d) + ' m from site'));
+          }
         })
         ["catch"](function(e){ btn.disabled = false; toast(e.message, true); });
     }, function(err){
