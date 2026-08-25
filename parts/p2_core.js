@@ -335,6 +335,8 @@ function loadAll(){
     if (state.auth) startRealtime();
   })["catch"](function(e){
     state.loading = false;
+    // an unrenewable session should land on the sign-in screen, not an error card
+    if (/jwt|expired|invalid token/i.test(e.message || '')) { signOut(); return; }
     if (initial) state.loadErr = e.message || 'Could not load data';
   });
 }

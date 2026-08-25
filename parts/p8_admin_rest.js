@@ -603,9 +603,13 @@ window.addEventListener('resize', (function(){
 
 (function boot(){
   var saved = loadSession();
-  // only restore a session that belongs to THIS portal and has real tokens
-  if (saved && saved.token && ((PORTAL === 'admin' && saved.mode === 'admin') || (PORTAL === 'worker' && saved.mode === 'worker'))) {
+  // only restore a session that belongs to THIS portal and can renew itself
+  // (token + refresh) — anything older gets a clean sign-in instead of a
+  // dead "JWT expired" screen
+  if (saved && saved.token && saved.refresh && ((PORTAL === 'admin' && saved.mode === 'admin') || (PORTAL === 'worker' && saved.mode === 'worker'))) {
     state.auth = saved;
+  } else {
+    clearSession();
   }
   render();
   if (state.auth) loadAll().then(render);
