@@ -327,7 +327,11 @@ function openAdminShift(s){
   /* facts */
   body.appendChild(el('div', { 'class': 'card', style: 'padding:6px 16px;margin-bottom:14px;box-shadow:none;background:var(--paper);border:0' }, [
     el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Client'), el('span', { 'class': 'v', style: 'color:' + (c ? c.colour : '') }, c ? c.name : '—') ]),
-    el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'When'), el('span', { 'class': 'v' }, fmtDate(s.date) + ' · ' + fmtRange(s.start_t, s.end_t)) ]),
+    el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'When'),
+      el('span', { 'class': 'v', style: 'display:flex;align-items:center;gap:6px;justify-content:flex-end' }, [
+        fmtDate(s.date) + ' · ' + fmtRange(s.start_t, s.end_t),
+        el('button', { 'class': 'btn btn-sm btn-ghost', style: 'min-height:28px;padding:2px 8px;font-size:12px', onclick: function(){ openEditRoster(s); } }, 'Change')
+      ]) ]),
     el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Duration'), el('span', { 'class': 'v' }, hrsFmt(rostered) + ' h' + (s.type === 'sleepover' ? ' · sleepover' : '')) ]),
     el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Address'), el('span', { 'class': 'v', style: 'font-weight:400;max-width:60%;text-align:right' }, c ? c.address : '—') ])
   ]));
