@@ -190,9 +190,11 @@ function openNoteModal(opts){
     uploadPending(prefix, pending).then(function(metas){
       var atts = existing.concat(metas);
       if (editing) {
-        return sbUpd('ac_note_entries', 'id=eq.' + note.id, {
+        var patch = {
           note_type: typeSel.value, body: bodyText, attachments: atts, updated_at: new Date().toISOString()
-        });
+        };
+        if (PORTAL !== 'admin') patch.seen = false;   // an edited note pops back up as new in the admin inbox
+        return sbUpd('ac_note_entries', 'id=eq.' + note.id, patch);
       }
       return sbIns('ac_note_entries', [{
         shift_id: shift ? shift.id : null,
@@ -396,7 +398,10 @@ function openIncidentModal(opts){
         injury_kind: f.injuries === 'No' ? '' : f.injury_kind,
         updated_at: new Date().toISOString()
       };
-      if (editing) return sbUpd('ac_incident_forms', 'id=eq.' + ir.id, rec);
+      if (editing) {
+        if (PORTAL !== 'admin') rec.seen = false;   // an edited report pops back up as new in the admin inbox
+        return sbUpd('ac_incident_forms', 'id=eq.' + ir.id, rec);
+      }
       rec.shift_id = shift ? shift.id : null;
       rec.participant_id = client ? client.id : null;
       rec.worker_id = worker ? worker.id : null;

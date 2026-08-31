@@ -30,7 +30,7 @@ function viewInbox(main){
   /* outstanding notes */
   var t = todayYmd();
   var outstanding = state.data.shifts.filter(function(s){
-    return s.worker_id && s.date >= addDays(t, -14) && shiftEnded(s) && notesForShift(s.id).length === 0;
+    return s.worker_id && !s.note_waived && s.date >= addDays(t, -14) && shiftEnded(s) && notesForShift(s.id).length === 0;
   }).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
   var secO = el('div', { 'class': 'section' });
   secO.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, 'Outstanding shift notes'));
@@ -49,27 +49,38 @@ function viewInbox(main){
           el('b', { style: 'font-size:14px' }, (c ? c.name : '?') + ' — ' + (w ? w.name : '?')),
           el('div', { 'class': 't-cap t-num' }, fmtDate(s.date) + ' · ' + fmtRange(s.start_t, s.end_t))
         ]),
-        w ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openReminder(s, w); } }, 'Remind') : null
+        w ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openReminder(s, w); } }, 'Remind') : null,
+        el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(e){
+          busyBtn(e.currentTarget, true);
+          sbUpd('ac_shifts', 'id=eq.' + s.id, { note_waived: true })
+            .then(function(){ toast('Cleared — this shift is no longer chased for a note'); refresh(); })
+            ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+        } }, 'Clear')
       ]));
     });
     secO.appendChild(listO);
   }
   main.appendChild(secO);
 
-  /* latest notes */
-  var secN = el('div', { 'class': 'section' });
-  secN.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, 'Latest shift notes'));
-  var latest = state.data.notes.slice(0, 8);
-  if (!latest.length) secN.appendChild(el('div', { 'class': 'notice' }, 'No notes yet.'));
-  else {
-    var listN = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
-    latest.forEach(function(n){
-      var w = workerById(n.worker_id), c = clientById(n.participant_id), s = n.shift_id ? shiftById(n.shift_id) : null;
-      listN.appendChild(el('button', { 'class': 'listnote', style: 'display:flex;gap:10px;width:100%;text-align:left', onclick: function(){ openNoteModal({ note: n, shift: s, worker: w }); } }, [
+  /* latest notes — unread first, read ones tucked behind a toggle */
+  function markSeenBtn(table, row){
+    return el('button', { 'class': 'btn btn-sm btn-ghost', style: 'flex:none;align-self:center', onclick: function(e){
+      e.stopPropagation();
+      busyBtn(e.currentTarget, true);
+      sbUpd(table, 'id=eq.' + row.id, { seen: true })
+        .then(function(){ refresh(); })
+        ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+    } }, 'Done');
+  }
+  function noteRow(n, isNew){
+    var w = workerById(n.worker_id), c = clientById(n.participant_id), s = n.shift_id ? shiftById(n.shift_id) : null;
+    return el('div', { style: 'display:flex;gap:6px;align-items:stretch' }, [
+      el('button', { 'class': 'listnote', style: 'display:flex;gap:10px;flex:1;min-width:0;text-align:left', onclick: function(){ openNoteModal({ note: n, shift: s, worker: w }); } }, [
         el('span', { style: 'color:var(--acc);display:flex;margin-top:2px' }, svgIcon(IC.note)),
         el('div', { style: 'flex:1;min-width:0' }, [
           el('div', { style: 'display:flex;gap:8px;align-items:baseline;flex-wrap:wrap' }, [
             el('b', { style: 'font-size:13.5px' }, n.note_type),
+            isNew ? el('span', { 'class': 'tag tag-ok' }, 'New') : null,
             c ? el('span', { style: 'font-size:12.5px;font-weight:700;color:' + c.colour }, c.name) : null,
             w ? el('span', { 'class': 't-cap' }, w.name) : null,
             el('span', { 'class': 't-cap t-num' }, fmtDT(n.created_at))
@@ -77,34 +88,71 @@ function viewInbox(main){
           el('div', { 'class': 't-cap', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px' }, notePreview(n.body))
         ]),
         el('span', { 'class': 't-cap', style: 'flex:none' }, 'Read / edit')
-      ]));
-    });
+      ]),
+      isNew ? markSeenBtn('ac_note_entries', n) : null
+    ]);
+  }
+  var secN = el('div', { 'class': 'section' });
+  var newN = state.data.notes.filter(function(n){ return !n.seen; });
+  var oldN = state.data.notes.filter(function(n){ return n.seen; }).slice(0, 8);
+  secN.appendChild(el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap' }, [
+    el('div', { 'class': 't-label' }, 'Latest shift notes'),
+    el('div', { 'class': 'spacer', style: 'flex:1' }),
+    newN.length > 1 ? el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(e){
+      busyBtn(e.currentTarget, true);
+      sbUpd('ac_note_entries', 'seen=eq.false', { seen: true })
+        .then(function(){ toast('All notes marked as read'); refresh(); })
+        ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+    } }, 'Mark all read') : null
+  ]));
+  if (!state.data.notes.length) secN.appendChild(el('div', { 'class': 'notice' }, 'No notes yet.'));
+  else {
+    var listN = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
+    if (!newN.length) listN.appendChild(el('div', { 'class': 'notice' }, 'No new notes — you have read everything.'));
+    newN.forEach(function(n){ listN.appendChild(noteRow(n, true)); });
+    if (oldN.length) {
+      listN.appendChild(el('button', { 'class': 'btn btn-sm btn-ghost', style: 'align-self:flex-start', onclick: function(){ ui.inboxReadNotes = !ui.inboxReadNotes; render(); } },
+        ui.inboxReadNotes ? 'Hide read notes' : 'Show read notes'));
+      if (ui.inboxReadNotes) oldN.forEach(function(n){ listN.appendChild(noteRow(n, false)); });
+    }
     secN.appendChild(listN);
   }
   main.appendChild(secN);
 
-  /* latest incidents */
-  var secI = el('div', { 'class': 'section' });
-  secI.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, 'Incident reports'));
-  var irs = state.data.incidents.slice(0, 8);
-  if (!irs.length) secI.appendChild(el('div', { 'class': 'notice' }, 'No incident reports.'));
-  else {
-    var listI = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
-    irs.forEach(function(ir){
-      var w = workerById(ir.worker_id), c = clientById(ir.participant_id), s = ir.shift_id ? shiftById(ir.shift_id) : null;
-      listI.appendChild(el('button', { 'class': 'listnote', style: 'display:flex;gap:10px;width:100%;text-align:left', onclick: function(){ openIncidentModal({ incident: ir, shift: s, worker: w }); } }, [
+  /* latest incidents — same unread-first pattern */
+  function irRow(ir, isNew){
+    var w = workerById(ir.worker_id), c = clientById(ir.participant_id), s = ir.shift_id ? shiftById(ir.shift_id) : null;
+    return el('div', { style: 'display:flex;gap:6px;align-items:stretch' }, [
+      el('button', { 'class': 'listnote', style: 'display:flex;gap:10px;flex:1;min-width:0;text-align:left', onclick: function(){ openIncidentModal({ incident: ir, shift: s, worker: w }); } }, [
         el('span', { style: 'color:var(--warnc);display:flex;margin-top:2px' }, svgIcon(IC.alert)),
         el('div', { style: 'flex:1;min-width:0' }, [
           el('div', { style: 'display:flex;gap:8px;align-items:baseline;flex-wrap:wrap' }, [
             el('b', { style: 'font-size:13.5px' }, (ir.incident_types || []).join(', ') || 'Incident'),
+            isNew ? el('span', { 'class': 'tag tag-warn' }, 'New') : null,
             c ? el('span', { style: 'font-size:12.5px;font-weight:700;color:' + c.colour }, c.name) : null,
             el('span', { 'class': 't-cap t-num' }, ir.incident_date ? fmtDate(ir.incident_date) : fmtDT(ir.created_at))
           ]),
           el('div', { 'class': 't-cap', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px' }, ir.ticket_desc)
         ]),
         el('span', { 'class': 't-cap', style: 'flex:none' }, 'Read / edit')
-      ]));
-    });
+      ]),
+      isNew ? markSeenBtn('ac_incident_forms', ir) : null
+    ]);
+  }
+  var secI = el('div', { 'class': 'section' });
+  var newI = state.data.incidents.filter(function(ir){ return !ir.seen; });
+  var oldI = state.data.incidents.filter(function(ir){ return ir.seen; }).slice(0, 8);
+  secI.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, 'Incident reports'));
+  if (!state.data.incidents.length) secI.appendChild(el('div', { 'class': 'notice' }, 'No incident reports.'));
+  else {
+    var listI = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
+    if (!newI.length) listI.appendChild(el('div', { 'class': 'notice' }, 'No new incident reports.'));
+    newI.forEach(function(ir){ listI.appendChild(irRow(ir, true)); });
+    if (oldI.length) {
+      listI.appendChild(el('button', { 'class': 'btn btn-sm btn-ghost', style: 'align-self:flex-start', onclick: function(){ ui.inboxReadIncidents = !ui.inboxReadIncidents; render(); } },
+        ui.inboxReadIncidents ? 'Hide read reports' : 'Show read reports'));
+      if (ui.inboxReadIncidents) oldI.forEach(function(ir){ listI.appendChild(irRow(ir, false)); });
+    }
     secI.appendChild(listI);
   }
   main.appendChild(secI);
