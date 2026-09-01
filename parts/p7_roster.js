@@ -447,7 +447,8 @@ function openEditRoster(s){
   var c = clientById(s.client_id);
   var splitSel = el('select', { 'class': 'sel' }, [el('option', { value: '' }, 'Needs cover (assign later)')].concat(
     state.data.workers.filter(function(w){ return w.active && !w.is_admin && w.id !== s.worker_id; }).map(function(w){
-      return el('option', { value: w.id }, w.name);
+      var busyThatDay = state.data.shifts.some(function(o){ return o.worker_id === w.id && o.date === s.date; });
+      return el('option', { value: w.id }, w.name + (busyThatDay ? ' · already rostered that day' : ''));
     })));
   var m = el('div', { 'class': 'modal', style: 'max-width:420px' }, [
     el('div', { 'class': 'sheet-grab' }),
@@ -488,12 +489,18 @@ function openEditRoster(s){
         var st = tMin(s.start_t), en = tMin(s.end_t), sp = tMin(split);
         var inside = en <= st ? (sp > st || sp < en) : (sp > st && sp < en);   // sleepovers cross midnight
         if (!inside) { toast('That time is not inside this shift (' + fmtRange(s.start_t, s.end_t) + ').', true); return; }
-        var origEnd = s.end_t, wid = splitSel.value || null;
-        busyBtn(e.currentTarget, true);
-        sbUpd('ac_shifts', 'id=eq.' + s.id, { end_t: split })
-          .then(function(){ return sbIns('ac_shifts', [{ client_id: s.client_id, req_id: s.req_id, date: s.date, start_t: split, end_t: origEnd, type: s.type, worker_id: wid }]); })
-          .then(function(){ closeModal(); toast('Shift split at ' + fmtTime(split) + (wid ? '' : ' — second part needs cover')); refresh(); })
-          ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+        var origEnd = s.end_t, wid = splitSel.value || null, btn = e.currentTarget;
+        function doSplit(){
+          busyBtn(btn, true);
+          sbUpd('ac_shifts', 'id=eq.' + s.id, { end_t: split })
+            .then(function(){ return sbIns('ac_shifts', [{ client_id: s.client_id, req_id: s.req_id, date: s.date, start_t: split, end_t: origEnd, type: s.type, worker_id: wid }]); })
+            .then(function(){ closeModal(); toast('Shift split at ' + fmtTime(split) + (wid ? '' : ' — second part needs cover')); refresh(); })
+            ["catch"](function(err){ busyBtn(btn, false); toast(err.message, true); });
+        }
+        var w2 = wid ? workerById(wid) : null;
+        if (w2 && doubleBooked(w2, { id: null, date: s.date, start_t: split, end_t: origEnd }))
+          confirmDlg('Double booking', w2.name + ' already has an overlapping shift then. Split anyway?', 'Split anyway', doSplit, true);
+        else doSplit();
       } }, 'Split shift'),
       el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Worker'),
       el('div', { style: 'display:flex;flex-direction:column;gap:8px' }, [
