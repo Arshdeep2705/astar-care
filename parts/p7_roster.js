@@ -23,6 +23,11 @@ function reqRows(){
 function shiftFor(reqId, date){
   return state.data.shifts.find(function(s){ return s.req_id === reqId && s.date === date; });
 }
+/* a slot can be split between two workers (e.g. 9–1 and 1–6) — every part, earliest first */
+function shiftsFor(reqId, date){
+  return state.data.shifts.filter(function(s){ return s.req_id === reqId && s.date === date; })
+    .sort(function(a, b){ return tMin(a.start_t) - tMin(b.start_t); });
+}
 /* one roster row per client — a client with several requirements (e.g. Tim's
    day shift + sleepover) gets its chips stacked in the same cell */
 function clientRowGroups(){
@@ -60,10 +65,15 @@ function viewRoster(main){
   rows.forEach(function(row){
     days.forEach(function(d){
       if (row.req.days.indexOf(dow(d)) < 0) return;
-      var s = shiftFor(row.req.id, d);
+      var parts = shiftsFor(row.req.id, d);
       total++;
-      hoursReq += shiftHours(s || row.req);
-      if (s && s.worker_id) { covered++; hoursFill += shiftHours(s); }
+      if (!parts.length) { hoursReq += shiftHours(row.req); return; }
+      var allCovered = true;
+      parts.forEach(function(p){
+        hoursReq += shiftHours(p);
+        if (p.worker_id) hoursFill += shiftHours(p); else allCovered = false;
+      });
+      if (allCovered) covered++;
     });
   });
   var urgents = state.data.flags.filter(function(f){ return f.urgent && !f.resolved; }).length;
@@ -202,7 +212,9 @@ function rosterWeekGrid(wkDays, groups, t){
       g.reqs.forEach(function(rq){
         if (rq.days.indexOf(dow(d)) < 0) return;
         any = true;
-        cell.appendChild(rosterChip(shiftFor(rq.id, d), { client: g.client, req: rq }, d));
+        var parts = shiftsFor(rq.id, d);
+        if (!parts.length) cell.appendChild(rosterChip(null, { client: g.client, req: rq }, d));
+        else parts.forEach(function(p){ cell.appendChild(rosterChip(p, { client: g.client, req: rq }, d)); });
       });
       if (!any) cell.appendChild(el('div', { 'class': 'rw-chip off' }, ''));
       tr.appendChild(cell);
@@ -218,7 +230,9 @@ function rosterMobileWeek(wkDays, rows, t){
     var items = [];
     rows.forEach(function(row){
       if (row.req.days.indexOf(dow(d)) < 0) return;
-      items.push({ s: shiftFor(row.req.id, d) || null, row: row });
+      var parts = shiftsFor(row.req.id, d);
+      if (!parts.length) items.push({ s: null, row: row });
+      else parts.forEach(function(p){ items.push({ s: p, row: row }); });
     });
     if (!items.length) return;
     var day = el('div', { 'class': 'agenda-day' + (d === t ? ' today' : '') }, [
@@ -431,6 +445,10 @@ function openAdminShift(s){
 
 function openEditRoster(s){
   var c = clientById(s.client_id);
+  var splitSel = el('select', { 'class': 'sel' }, [el('option', { value: '' }, 'Needs cover (assign later)')].concat(
+    state.data.workers.filter(function(w){ return w.active && !w.is_admin && w.id !== s.worker_id; }).map(function(w){
+      return el('option', { value: w.id }, w.name);
+    })));
   var m = el('div', { 'class': 'modal', style: 'max-width:420px' }, [
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
@@ -458,6 +476,25 @@ function openEditRoster(s){
           .then(function(){ closeModal(); toast('Shift updated to ' + fmtDate(nd) + ' · ' + fmtRange(ns, ne)); refresh(); })
           ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
       } }, 'Save date & times'),
+      el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Share with a second worker'),
+      el('p', { 'class': 't-mut', style: 'font-size:13px;margin-bottom:10px' }, 'Splits this shift in two. The current worker keeps the first part and the second worker takes over from the time you pick. Each part gets its own clock in/out and note.'),
+      el('div', { 'class': 'grid2' }, [
+        el('div', { 'class': 'field' }, [ el('label', null, 'Second worker starts'), el('input', { 'class': 'inp', type: 'time', id: 'es-split' }) ]),
+        el('div', { 'class': 'field' }, [ el('label', null, 'Second worker'), splitSel ])
+      ]),
+      el('button', { 'class': 'btn btn-sec btn-block', style: 'margin-bottom:16px', onclick: function(e){
+        var split = document.getElementById('es-split').value;
+        if (!split) { toast('Pick the time the second worker starts.', true); return; }
+        var st = tMin(s.start_t), en = tMin(s.end_t), sp = tMin(split);
+        var inside = en <= st ? (sp > st || sp < en) : (sp > st && sp < en);   // sleepovers cross midnight
+        if (!inside) { toast('That time is not inside this shift (' + fmtRange(s.start_t, s.end_t) + ').', true); return; }
+        var origEnd = s.end_t, wid = splitSel.value || null;
+        busyBtn(e.currentTarget, true);
+        sbUpd('ac_shifts', 'id=eq.' + s.id, { end_t: split })
+          .then(function(){ return sbIns('ac_shifts', [{ client_id: s.client_id, req_id: s.req_id, date: s.date, start_t: split, end_t: origEnd, type: s.type, worker_id: wid }]); })
+          .then(function(){ closeModal(); toast('Shift split at ' + fmtTime(split) + (wid ? '' : ' — second part needs cover')); refresh(); })
+          ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+      } }, 'Split shift'),
       el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Worker'),
       el('div', { style: 'display:flex;flex-direction:column;gap:8px' }, [
         el('button', { 'class': 'btn btn-sec btn-block', onclick: function(){ closeModal(); openAssign(s); } }, 'Reassign to someone else'),
