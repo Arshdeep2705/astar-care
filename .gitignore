@@ -3,3 +3,6 @@ shots/
 vapid.json
 guide/
 templates/
+
+# private docs: master guide (contains secrets), worker guide PDF, screenshots — never publish
+docs/
