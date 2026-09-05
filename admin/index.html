@@ -434,7 +434,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260905173841';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260905211132';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -3542,6 +3542,22 @@ function fortStart(anchorLike){
   })();
   return base;
 }
+/* pay for one shift: flat shift types (req.flat_pay) pay the flat amount plus
+   hours beyond the standard length at flat/standard per hour; a part of a
+   shared slot is pro-rated; hourly types return flat:false for the caller */
+function shiftPay(s){
+  var rq = state.data.reqs.find(function(x){ return x.id === s.req_id; });
+  if (!rq || rq.flat_pay == null || rq.flat_pay === '') return { flat: false };
+  var flat = +rq.flat_pay || 0;
+  var stdH = shiftHours(rq) || 1;
+  var h = shiftHours(s);
+  var hourly = flat / stdH;
+  var shared = shiftsFor(s.req_id, s.date).length > 1;
+  if (shared) return { flat: true, base: Math.round(hourly * h * 100) / 100, extraH: 0, extra: 0, hourly: hourly, shared: true };
+  var extraH = Math.max(0, h - stdH);
+  return { flat: true, base: flat, extraH: extraH, extra: Math.round(extraH * hourly * 100) / 100, hourly: hourly };
+}
+
 function viewPay(main){
   var fs = fortStart();
   state.pay.anchor = fs;
@@ -3555,19 +3571,23 @@ function viewPay(main){
   ]));
 
   var workers = state.data.workers.filter(function(w){ return !w.is_admin && w.active; });
-  var anyRates = workers.some(function(w){ var r = w.rates || {}; return (r.weekday || r.saturday || r.sunday || r.sleepover); });
+  var anyRates = workers.some(function(w){ var r = w.rates || {}; return (r.weekday || r.saturday || r.sunday); });
   if (!anyRates) {
     main.appendChild(el('div', { 'class': 'banner warn', style: 'margin-bottom:14px' }, [
       el('div', { style: 'color:var(--warnc);display:flex' }, svgIcon(IC.alert)),
       el('div', { style: 'font-size:13.5px' }, 'All pay rates are still $0 — set each worker’s rates under Team → Rates and the totals here fill in.')
     ]));
   }
+  main.appendChild(el('div', { 'class': 'hint', style: 'margin-bottom:4px' },
+    'Hourly shift types pay the worker’s weekday / Saturday / Sunday rate. Flat shift types (set on the shift type under Team, e.g. Tim’s day $250 and sleepover $150) pay the flat amount per shift, plus any hours beyond the standard length at that shift’s hourly rate (flat ÷ standard hours). A shorter shift is not reduced unless the slot was shared with a second worker, which pays pro-rata. Kilometres come from Mileage notes at ' + money(+(state.data.settings.km_rate || 0)) + '/km.'));
 
   workers.forEach(function(w){
     var mine = state.data.shifts.filter(function(s){ return s.worker_id === w.id && s.date >= fs && s.date <= fe; });
-    var hWd = 0, hSat = 0, hSun = 0, sleeps = 0, kmSum = 0;
+    var hWd = 0, hSat = 0, hSun = 0, kmSum = 0;
+    var flatN = 0, flatAmt = 0, extraH = 0, extraAmt = 0;
     mine.forEach(function(s){
-      if (s.type === 'sleepover') { sleeps++; return; }
+      var p = shiftPay(s);
+      if (p.flat) { flatN++; flatAmt += p.base; extraH += p.extraH; extraAmt += p.extra; return; }
       var d = dow(s.date), h = shiftHours(s);
       if (d === 6) hSat += h; else if (d === 0) hSun += h; else hWd += h;
     });
@@ -3580,7 +3600,7 @@ function viewPay(main){
     });
     var r = w.rates || {};
     var kmRate = +(state.data.settings.km_rate || 0);
-    var total = hWd * (+r.weekday || 0) + hSat * (+r.saturday || 0) + hSun * (+r.sunday || 0) + sleeps * (+r.sleepover || 0) + kmSum * kmRate;
+    var total = hWd * (+r.weekday || 0) + hSat * (+r.saturday || 0) + hSun * (+r.sunday || 0) + flatAmt + extraAmt + kmSum * kmRate;
     var inv = state.data.invoices.find(function(x){ return x.worker_id === w.id && x.fort_start === fs; });
 
     var card = el('div', { 'class': 'card card-pad', style: 'margin-top:14px' });
@@ -3592,10 +3612,11 @@ function viewPay(main){
     var grid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px' });
     [['Weekday', hrsFmt(hWd) + ' h', money(hWd * (+r.weekday || 0))],
      ['Saturday', hrsFmt(hSat) + ' h', money(hSat * (+r.saturday || 0))],
-     ['Sunday', hrsFmt(hSun) + ' h', money(hSun * (+r.sunday || 0))],
-     ['Sleepovers', String(sleeps), money(sleeps * (+r.sleepover || 0))],
+     hSun ? ['Sunday', hrsFmt(hSun) + ' h', money(hSun * (+r.sunday || 0))] : null,
+     ['Flat shifts', String(flatN), money(flatAmt)],
+     ['Extra hours', hrsFmt(extraH) + ' h', money(extraAmt)],
      ['Kilometres', hrsFmt(kmSum) + ' km', money(kmSum * kmRate)]
-    ].forEach(function(p){
+    ].filter(Boolean).forEach(function(p){
       grid.appendChild(el('div', { style: 'background:var(--paper);border-radius:10px;padding:9px 12px' }, [
         el('div', { 'class': 't-cap' }, p[0]),
         el('b', { 'class': 't-num', style: 'font-size:14px' }, p[1]),
@@ -3671,6 +3692,7 @@ function viewTeam(main){
           el('span', { 'class': 'tag ' + (r.type === 'sleepover' ? 'tag-sleep' : 'tag-day') }, r.type === 'sleepover' ? 'Sleepover' : 'Day'),
           el('b', null, r.label),
           el('span', { 'class': 't-mut t-num' }, fmtRange(r.start_t, r.end_t)),
+          r.flat_pay != null ? el('span', { 'class': 'tag tag-mut t-num' }, 'flat ' + money(+r.flat_pay) + ' · extra ' + money((+r.flat_pay) / (shiftHours(r) || 1)) + '/h') : null,
           el('span', { 'class': 't-cap' }, r.days.length === 7 ? 'Every day' : r.days.slice().sort().map(function(d){ return DOW3[d]; }).join(' ')),
           el('button', { 'class': 'btn btn-sm btn-ghost', style: 'min-height:26px;padding:1px 8px;font-size:12px;margin-left:auto', onclick: function(){ openReqModal(c, r); } }, 'Edit')
         ]);
@@ -3753,7 +3775,8 @@ function openClientModal(c){
 /* ---------- shift requirement editor ---------- */
 function openReqModal(client, r){
   var f = { label: r ? r.label : 'Day shift', type: r ? r.type : 'day',
-    days: r ? r.days.slice() : [1,2,3,4,5], start_t: r ? r.start_t : '09:00', end_t: r ? r.end_t : '17:00' };
+    days: r ? r.days.slice() : [1,2,3,4,5], start_t: r ? r.start_t : '09:00', end_t: r ? r.end_t : '17:00',
+    flat_pay: r && r.flat_pay != null ? String(r.flat_pay) : '' };
   var typeSel = el('select', { 'class': 'sel', onchange: function(e){ f.type = e.target.value; } }, [
     el('option', { value: 'day', selected: f.type === 'day' }, 'Day'),
     el('option', { value: 'sleepover', selected: f.type === 'sleepover' }, 'Sleepover (crosses midnight)')
@@ -3785,7 +3808,10 @@ function openReqModal(client, r){
         el('div', { 'class': 'field' }, [ el('label', null, 'Start'), el('input', { 'class': 'inp', type: 'time', value: f.start_t, onchange: function(e){ f.start_t = e.target.value; } }) ]),
         el('div', { 'class': 'field' }, [ el('label', null, 'End'), el('input', { 'class': 'inp', type: 'time', value: f.end_t, onchange: function(e){ f.end_t = e.target.value; } }) ])
       ]),
-      el('div', { 'class': 'hint', style: 'margin-top:-6px' }, 'Changing times here shapes the roster grid and NEW shifts — shifts already created keep their own times (edit those from the roster).')
+      el('div', { 'class': 'hint', style: 'margin-top:-6px' }, 'Changing times here shapes the roster grid and NEW shifts — shifts already created keep their own times (edit those from the roster).'),
+      el('div', { 'class': 'field', style: 'margin-top:14px' }, [ el('label', null, 'Flat worker pay per shift ($)'),
+        el('input', { 'class': 'inp t-num', type: 'number', inputmode: 'decimal', step: '0.01', min: '0', placeholder: 'Leave blank to pay hourly', value: f.flat_pay, oninput: function(e){ f.flat_pay = e.target.value; } }),
+        el('div', { 'class': 'hint' }, 'Blank = the worker’s hourly weekday / Saturday / Sunday rate applies. A flat amount is paid per shift of this type regardless of who works it; hours beyond the standard length are paid at flat ÷ standard hours.') ])
     ]),
     el('div', { 'class': 'modal-foot' }, [
       r ? el('button', { 'class': 'btn btn-danger', onclick: function(){
@@ -3801,7 +3827,8 @@ function openReqModal(client, r){
         if (!f.label.trim()) { toast('Give it a label.', true); return; }
         if (!f.days.length) { toast('Pick at least one day.', true); return; }
         if (!f.start_t || !f.end_t) { toast('Set both times.', true); return; }
-        var rec = { label: f.label.trim(), type: f.type, days: f.days, start_t: f.start_t, end_t: f.end_t };
+        var rec = { label: f.label.trim(), type: f.type, days: f.days, start_t: f.start_t, end_t: f.end_t,
+          flat_pay: f.flat_pay === '' || f.flat_pay == null ? null : (parseFloat(f.flat_pay) || 0) };
         busyBtn(e.currentTarget, true);
         (r ? sbUpd('ac_reqs', 'id=eq.' + r.id, rec) : sbIns('ac_reqs', [Object.assign({ client_id: client.id }, rec)]))
           .then(function(){ closeModal(); toast('Shift type saved'); refresh(); })
@@ -3891,7 +3918,7 @@ function openAddWorker(){
 function openRates(w){
   var r = {};
   var cur = w.rates || {};
-  ['weekday','saturday','sunday','sleepover'].forEach(function(k){ r[k] = cur[k] != null ? cur[k] : 0; });
+  ['weekday','saturday','sunday'].forEach(function(k){ r[k] = cur[k] != null ? cur[k] : 0; });
   function rateField(label, key, hint){
     return el('div', { 'class': 'field' }, [
       el('label', null, label),
@@ -3902,14 +3929,13 @@ function openRates(w){
   var m = el('div', { 'class': 'modal', style: 'max-width:420px' }, [
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
-      el('div', null, [ el('div', { 'class': 't-title' }, w.name + ' — rates'), el('div', { 'class': 't-cap' }, 'Per hour, except sleepover (per night)') ]),
+      el('div', null, [ el('div', { 'class': 't-title' }, w.name + ' — rates'), el('div', { 'class': 't-cap' }, 'Per hour, for hourly shift types (Allan, Nick). Flat shift types like Tim’s are set on the shift type under Team.') ]),
       el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       rateField('Weekday ($/h)', 'weekday'),
       rateField('Saturday ($/h)', 'saturday'),
-      rateField('Sunday ($/h)', 'sunday'),
-      rateField('Sleepover ($/night)', 'sleepover')
+      rateField('Sunday ($/h)', 'sunday', 'No Sunday shifts at the moment — set to the Saturday rate as a default.')
     ]),
     el('div', { 'class': 'modal-foot' }, [
       el('div', { 'class': 'spacer' }),
