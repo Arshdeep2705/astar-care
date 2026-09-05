@@ -467,7 +467,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260905220128';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260905220459';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -3595,21 +3595,30 @@ function fortStart(anchorLike){
   })();
   return base;
 }
-/* pay for one shift: flat shift types (req.flat_pay) pay the flat amount plus
-   hours beyond the standard length at flat/standard per hour; a part of a
-   shared slot is pro-rated; hourly types return flat:false for the caller */
+/* pay for one shift on a flat-priced client, AS ROSTERED (owner rule 2026-09-05): each
+   rostered hour is paid at the rate of the PERIOD it falls in — the client's shift types
+   define the periods (Tim: day 09:00–18:00 = $250 ÷ 9 h, sleepover 18:00–09:00 = $150 ÷ 15 h).
+   A standard-length shift therefore pays its flat amount; a sleepover that runs to noon earns
+   the morning at the day rate; a day shift that starts late loses those hours. Hourly clients
+   (no flat_pay on their shift types) return flat:false for the caller. */
 function shiftPay(s){
   var rq = state.data.reqs.find(function(x){ return x.id === s.req_id; });
   if (!rq || rq.flat_pay == null || rq.flat_pay === '') return { flat: false };
-  var flat = +rq.flat_pay || 0;
-  var stdH = shiftHours(rq) || 1;
-  var h = shiftHours(s);
-  var hourly = flat / stdH;
-  var shared = shiftsFor(s.req_id, s.date).length > 1;
-  if (shared) return { flat: true, base: Math.round(hourly * h * 100) / 100, extraH: 0, extra: 0, hourly: hourly, shared: true };
-  var extraH = Math.max(0, h - stdH);
-  return { flat: true, base: flat, extraH: extraH, extra: Math.round(extraH * hourly * 100) / 100, hourly: hourly };
+  var periods = state.data.reqs.filter(function(x){ return x.client_id === s.client_id && x.flat_pay != null && x.flat_pay !== '' && x.active !== false; })
+    .map(function(x){ return { a: tMin(x.start_t), b: tMin(x.end_t), perMin: (+x.flat_pay || 0) / ((shiftHours(x) || 1) * 60) }; });
+  function inWin(p, t){ return p.b > p.a ? (t >= p.a && t < p.b) : (t >= p.a || t < p.b); }
+  var own = (+rq.flat_pay || 0) / ((shiftHours(rq) || 1) * 60);
+  var start = tMin(s.start_t), mins = Math.round(shiftHours(s) * 60), amt = 0, step = 15;
+  for (var m = 0; m < mins; m += step) {
+    var t = (start + m) % 1440, n = Math.min(step, mins - m);
+    var p = periods.find(function(x){ return inWin(x, t); });
+    amt += (p ? p.perMin : own) * n;
+  }
+  var flat = +rq.flat_pay || 0, stdH = shiftHours(rq) || 1, h = shiftHours(s);
+  amt = Math.round(amt * 100) / 100;
+  return { flat: true, base: amt, hours: h, extraH: Math.round((h - stdH) * 100) / 100, extra: Math.round((amt - flat) * 100) / 100, hourly: flat / stdH };
 }
+function moneySigned(n){ return (n < 0 ? '−' : (n > 0 ? '+' : '')) + money(Math.abs(n)); }
 
 /* the pay period: fortnight (pay cycle, default) / week / calendar month / custom dates */
 function payRange(){
@@ -3680,16 +3689,16 @@ function viewPay(main){
     ]));
   }
   main.appendChild(el('div', { 'class': 'hint', style: 'margin-bottom:4px' },
-    'Hourly shift types pay the worker’s weekday / Saturday / Sunday rate. Flat shift types (set on the shift type under Team, e.g. Tim’s day $250 and sleepover $150) pay the flat amount per shift, plus any hours beyond the standard length at that shift’s hourly rate (flat ÷ standard hours). A shorter shift is not reduced unless the slot was shared with a second worker, which pays pro-rata. Kilometres come from Mileage notes at ' + money(+(state.data.settings.km_rate || 0)) + '/km.'));
+    'Everyone is paid as rostered. Hourly shift types pay the worker’s weekday / Saturday / Sunday rate for the rostered hours. Flat shift types (set on the shift type under Team, e.g. Tim’s day $250 for 9am–6pm and sleepover $150 for 6pm–9am) pay each rostered hour at the rate of the period it falls in, so a standard shift earns its flat amount, a sleepover that runs into the morning earns those hours at the day rate, and a day shift that starts late loses them. Kilometres come from Mileage notes at ' + money(+(state.data.settings.km_rate || 0)) + '/km.'));
 
   if (onlyClient && !workers.length) main.appendChild(el('div', { 'class': 'notice', style: 'margin-top:14px' }, 'No shifts for ' + onlyClient.name + ' in this period.'));
   workers.forEach(function(w){
     var mine = state.data.shifts.filter(function(s){ return s.worker_id === w.id && inScope(s); });
     var hWd = 0, hSat = 0, hSun = 0, kmSum = 0;
-    var flatN = 0, flatAmt = 0, extraH = 0, extraAmt = 0;
+    var flatN = 0, flatH = 0, flatAmt = 0, extraH = 0, extraAmt = 0;
     mine.forEach(function(s){
       var p = shiftPay(s);
-      if (p.flat) { flatN++; flatAmt += p.base; extraH += p.extraH; extraAmt += p.extra; return; }
+      if (p.flat) { flatN++; flatH += p.hours; flatAmt += p.base; extraH += p.extraH; extraAmt += p.extra; return; }
       var d = dow(s.date), h = shiftHours(s);
       if (d === 6) hSat += h; else if (d === 0) hSun += h; else hWd += h;
     });
@@ -3702,7 +3711,7 @@ function viewPay(main){
     });
     var r = w.rates || {};
     var kmRate = +(state.data.settings.km_rate || 0);
-    var total = hWd * (+r.weekday || 0) + hSat * (+r.saturday || 0) + hSun * (+r.sunday || 0) + flatAmt + extraAmt + kmSum * kmRate;
+    var total = hWd * (+r.weekday || 0) + hSat * (+r.saturday || 0) + hSun * (+r.sunday || 0) + flatAmt + kmSum * kmRate;
     var inv = state.data.invoices.find(function(x){ return x.worker_id === w.id && x.fort_start === fs; });
     grand += total; grandN += mine.length;
 
@@ -3716,8 +3725,8 @@ function viewPay(main){
     [['Weekday', hrsFmt(hWd) + ' h', money(hWd * (+r.weekday || 0))],
      ['Saturday', hrsFmt(hSat) + ' h', money(hSat * (+r.saturday || 0))],
      hSun ? ['Sunday', hrsFmt(hSun) + ' h', money(hSun * (+r.sunday || 0))] : null,
-     ['Flat shifts', String(flatN), money(flatAmt)],
-     ['Extra hours', hrsFmt(extraH) + ' h', money(extraAmt)],
+     ['Flat shifts', flatN + (flatN ? ' · ' + hrsFmt(flatH) + ' h' : ''), money(flatAmt)],
+     ['Over / under standard', (extraH > 0 ? '+' : (extraH < 0 ? '−' : '')) + hrsFmt(Math.abs(extraH)) + ' h', moneySigned(extraAmt)],
      ['Kilometres', hrsFmt(kmSum) + ' km', money(kmSum * kmRate)]
     ].filter(Boolean).forEach(function(p){
       grid.appendChild(el('div', { style: 'background:var(--paper);border-radius:10px;padding:9px 12px' }, [
