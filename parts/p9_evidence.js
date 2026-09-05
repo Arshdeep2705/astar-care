@@ -311,7 +311,10 @@ function viewReports(main){
 
   main.appendChild(el('div', { 'class': 'section-head', style: 'margin:6px 0 12px;flex-wrap:wrap' }, [
     el('div', { 'class': 't-display' }, 'Reports'),
-    el('button', { 'class': 'btn btn-sec btn-sm rp-controls', onclick: function(){ window.print(); } }, [svgIcon(IC.file), 'Print / save as PDF'])
+    el('div', { 'class': 'rp-controls', style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
+      el('button', { 'class': 'btn btn-pri btn-sm', onclick: openExportOptions }, [svgIcon(IC.file), 'Export records']),
+      el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ window.print(); } }, 'Print this summary')
+    ])
   ]));
   main.appendChild(el('div', { 'class': 'rp-controls', style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px' }, [
     el('div', { 'class': 'field', style: 'margin:0;min-width:160px' }, [ el('label', null, 'Participant'),
@@ -380,7 +383,9 @@ function viewReports(main){
   var onCard = rpCard('Overnight support inside the sleepover block (11pm to 7am)', 'Each bar is one night: grey = asleep, teal = active support, red = active support above the 2 hours included in the sleepover rate.', []);
   if (!nights.length) onCard.appendChild(el('div', { 'class': 'notice' }, 'No overnight summaries recorded in this period.'));
   else {
-    var W = Math.max(320, nights.length * 26 + 40), H = 150, top = 10, bottom = 26, plotH = H - top - bottom, bw = Math.min(20, (W - 40) / nights.length - 4);
+    /* fixed 720-unit canvas so a handful of nights doesn't get blown up to poster size */
+    var W = Math.max(720, nights.length * 26 + 40), H = 170, top = 10, bottom = 26, plotH = H - top - bottom;
+    var slot = (W - 40) / nights.length, bw = Math.max(6, Math.min(28, slot - 6));
     var svg = svgNode('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', style: 'max-width:100%;height:auto;display:block' });
     for (var g = 0; g <= 8; g += 2) {
       var gy = top + plotH - (g / 8) * plotH;
@@ -390,7 +395,7 @@ function viewReports(main){
     var ly = top + plotH - (2 / 8) * plotH;
     svg.appendChild(svgNode('line', { x1: 30, x2: W, y1: ly, y2: ly, stroke: '#b3261e', 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }));
     nights.forEach(function(n, i){
-      var x = 34 + i * ((W - 40) / nights.length);
+      var x = 34 + i * slot + (slot - bw) / 2;
       var hA = (Math.min(n.asleep, 8) / 8) * plotH, hX = (Math.min(n.active, 8 - n.asleep) / 8) * plotH;
       var yBase = top + plotH;
       svg.appendChild(svgNode('rect', { x: x, y: yBase - hA, width: bw, height: hA, fill: '#d9d4ca' }));

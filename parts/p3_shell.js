@@ -280,6 +280,7 @@ function renderAdmin(app){
   else if (state.adminTab === 'avail') viewAdminAvail(main);
   else if (state.adminTab === 'pay') viewPay(main);
   else if (state.adminTab === 'reports') viewReports(main);
+  else if (state.adminTab === 'export') viewExport(main);
   else if (state.adminTab === 'team') viewTeam(main);
   app.appendChild(main);
   app.appendChild(bottomNav(items, state.adminTab, function(id){ state.adminTab = id; render(); }));
