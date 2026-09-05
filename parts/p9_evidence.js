@@ -312,8 +312,7 @@ function viewReports(main){
   main.appendChild(el('div', { 'class': 'section-head', style: 'margin:6px 0 12px;flex-wrap:wrap' }, [
     el('div', { 'class': 't-display' }, 'Reports'),
     el('div', { 'class': 'rp-controls', style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
-      el('button', { 'class': 'btn btn-pri btn-sm', onclick: openExportOptions }, [svgIcon(IC.file), 'Export records']),
-      el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ window.print(); } }, 'Print this summary')
+      el('button', { 'class': 'btn btn-pri btn-sm', onclick: openExportOptions }, [svgIcon(IC.file), 'Export'])
     ])
   ]));
   main.appendChild(el('div', { 'class': 'rp-controls', style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px' }, [
