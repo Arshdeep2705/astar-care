@@ -263,36 +263,34 @@ function openOvernightModal(opts){
   openModal(m);
 }
 
-/* ================= admin: reports ================= */
-function rpKpi(v, l, cls){ return el('div', { 'class': 'rp-kpi' }, [ el('div', { 'class': 'v', style: cls ? 'color:var(--' + cls + ')' : '' }, v), el('div', { 'class': 'l' }, l) ]); }
-function rpCard(title, sub, children){ return el('div', { 'class': 'rp-card' }, [ el('h4', null, title), sub ? el('div', { 'class': 'rp-sub' }, sub) : null ].concat(children)); }
-function rpHBars(rows, max, cls){
-  if (!rows.length) return el('div', { 'class': 'notice' }, 'Nothing recorded in this period.');
-  var m = max || Math.max.apply(null, rows.map(function(r){ return r.v; })) || 1;
-  return el('div', null, rows.map(function(r){
-    return el('div', { 'class': 'hb' }, [
-      el('div', { 'class': 'hb-l' }, r.l),
-      el('div', { 'class': 'hb-t' }, el('div', { 'class': 'hb-f ' + (r.cls || cls || ''), style: 'width:' + Math.round(r.v / m * 100) + '%' })),
-      el('div', { 'class': 'hb-n' }, r.txt != null ? r.txt : String(r.v))
-    ]);
-  }));
+/* ================= admin: reports — Support Needs Summary ================= */
+/* Chart colours are validated (colour-vision safe, chroma floor, contrast):
+   teal = accent series, red = falls / over allowance, amber = near misses, grey = asleep. */
+var RP_C = { acc: '#0f9b8a', bad: '#c92f2f', warn: '#b8860b', dim: '#cfcac0', grid: '#e7e4de', axis: '#8a919b', ink: '#14181d' };
+
+function rpSec(n, title, lead, kids, cls){
+  return el('section', { 'class': 'rp-sec' + (cls ? ' ' + cls : '') }, [
+    el('div', { 'class': 'rp-sec-h' }, [
+      el('span', { 'class': 'rp-num' }, String(n)),
+      el('div', { style: 'min-width:0' }, [ el('h3', { 'class': 'rp-h3' }, title), lead ? el('p', { 'class': 'rp-lead' }, lead) : null ])
+    ])
+  ].concat(kids || []));
 }
-function rpVBars(cols, max){
-  /* cols: [{l, bars:[{v, cls}]}] — grouped vertical bars */
-  var m = max || Math.max.apply(null, cols.map(function(c){ return Math.max.apply(null, c.bars.map(function(b){ return b.v; })); })) || 1;
-  return el('div', null, [
-    el('div', { 'class': 'vb' }, cols.map(function(c){
-      return el('div', { 'class': 'vb-c' }, el('div', { style: 'display:flex;gap:3px;align-items:flex-end;width:100%;justify-content:center;height:100%' }, c.bars.map(function(b){
-        return el('div', { 'class': 'vb-b ' + (b.cls || ''), style: 'height:' + Math.max(b.v ? 3 : 0, Math.round(b.v / m * 100)) + '%', title: b.v });
-      })));
-    })),
-    el('div', { 'class': 'vb-x' }, cols.map(function(c){ return el('div', null, c.l); }))
-  ]);
-}
+function rpEmpty(text, hint){ return el('div', { 'class': 'rp-empty' }, [ el('b', null, text), hint ? el('div', null, hint) : null ]); }
+function rpTile(label, value, ctx){ return el('div', { 'class': 'rp-kpi' }, [ el('div', { 'class': 'l' }, label), el('div', { 'class': 'v' }, value), el('div', { 'class': 'c' }, ctx || '') ]); }
 function rpLegend(items){
-  return el('div', { style: 'display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--mut)' }, items.map(function(it){
-    return el('span', { style: 'display:inline-flex;align-items:center;gap:6px' }, [ el('span', { style: 'width:10px;height:10px;border-radius:3px;background:' + it.c + ';display:inline-block' }), it.l ]);
-  }));
+  return el('div', { 'class': 'rp-legend' }, items.map(function(it){ return el('span', null, [ el('i', { style: 'background:' + it.c }), it.l ]); }));
+}
+function rpSub(text){ return el('div', { 'class': 'rp-sub' }, text); }
+function rpTable(head, rows){
+  return el('div', { 'class': 'rp-tbl-wrap' }, el('table', { 'class': 'rp-tbl' }, [
+    el('tr', null, head.map(function(h){ return el('th', { 'class': h.n ? 'n' : '' }, h.t || h); }))
+  ].concat(rows.map(function(r){
+    return el('tr', null, r.map(function(c){
+      if (c && typeof c === 'object' && !c.nodeType) return el('td', { 'class': (c.n ? 'n' : '') + (c.m ? ' m' : '') }, c.t);
+      return el('td', null, c == null ? '' : c);
+    }));
+  }))));
 }
 function svgNode(tag, attrs, kids){
   var n = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -300,22 +298,118 @@ function svgNode(tag, attrs, kids){
   (kids || []).forEach(function(k){ if (k) n.appendChild(k); });
   return n;
 }
+function svgText(x, y, txt, attrs){
+  var a = { x: x, y: y, 'font-size': 11, fill: RP_C.axis };
+  Object.keys(attrs || {}).forEach(function(k){ a[k] = attrs[k]; });
+  var t = svgNode('text', a); t.textContent = txt; return t;
+}
+function svgTitle(node, txt){ var t = svgNode('title'); t.textContent = txt; node.appendChild(t); return node; }
+function roundTopPath(x, y, w, h, r){
+  r = Math.min(r, w / 2, h);
+  return 'M' + x + ',' + (y + h) + ' L' + x + ',' + (y + r) + ' Q' + x + ',' + y + ' ' + (x + r) + ',' + y +
+    ' L' + (x + w - r) + ',' + y + ' Q' + (x + w) + ',' + y + ' ' + (x + w) + ',' + (y + r) + ' L' + (x + w) + ',' + (y + h) + ' Z';
+}
+function rpNiceMax(v){
+  if (v <= 4) return 4;
+  if (v <= 8) return 8;
+  var p = Math.pow(10, Math.floor(Math.log(v) / Math.LN10)), f = v / p;
+  return (f <= 2 ? 2 : (f <= 5 ? 5 : 10)) * p;
+}
 function pct(n, d){ return d ? Math.round(n / d * 100) + '%' : '—'; }
 function avg(arr){ return arr.length ? arr.reduce(function(a, b){ return a + b; }, 0) / arr.length : 0; }
 function sum(arr){ return arr.reduce(function(a, b){ return a + b; }, 0); }
+
+/* Column chart (grouped or stacked). groups: [{label, vals:[...]}]; series: [{name, color}].
+   opts: stacked, yMax, unit ('h' or ''), ref {v, label}, capLabel(group) -> text|null, height */
+function rpColumns(groups, series, opts){
+  opts = opts || {};
+  var n = groups.length, W = 720, H = opts.height || 210, padL = 38, padR = 14, top = 22, bottom = 28;
+  var plotW = W - padL - padR, plotH = H - top - bottom;
+  var maxV = 0;
+  groups.forEach(function(g){ var t = opts.stacked ? sum(g.vals) : Math.max.apply(null, g.vals); if (t > maxV) maxV = t; });
+  var yMax = opts.yMax || rpNiceMax(maxV || 1), step = yMax / 4;
+  var svg = svgNode('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', 'class': 'rp-svg', role: 'img' });
+  function yOf(v){ return top + plotH - v / yMax * plotH; }
+  for (var i = 0; i <= 4; i++) {
+    var v = step * i, y = yOf(v);
+    svg.appendChild(svgNode('line', { x1: padL, x2: W - padR, y1: y, y2: y, stroke: i === 0 ? RP_C.axis : RP_C.grid, 'stroke-width': 1 }));
+    var tick = (Math.round(v * 100) / 100) + (opts.unit === 'h' ? ' h' : '');
+    if (opts.unit === 'h' || v === Math.round(v)) svg.appendChild(svgText(padL - 8, y + 4, tick, { 'text-anchor': 'end' }));
+  }
+  var slot = plotW / n, k = opts.stacked ? 1 : series.length;
+  var bw = Math.min(24, Math.max(5, (slot - 10) / k - 2));
+  var groupW = k * bw + (k - 1) * 2;
+  var every = n <= 14 ? 1 : Math.ceil(n / 14);
+  groups.forEach(function(g, gi){
+    var x0 = padL + gi * slot + (slot - groupW) / 2, base = top + plotH, topY = base;
+    if (opts.stacked) {
+      var acc = 0, topIdx = -1;
+      g.vals.forEach(function(v, si){ if (v > 0) topIdx = si; });
+      g.vals.forEach(function(v, si){
+        if (!(v > 0)) return;
+        var y1 = yOf(acc + v), y0 = yOf(acc), h = y0 - y1;
+        var gap = si === topIdx ? 0 : 2; /* 2px surface gap between stacked segments */
+        var node = si === topIdx
+          ? svgNode('path', { d: roundTopPath(x0, y1, bw, h, 4), fill: series[si].color })
+          : svgNode('rect', { x: x0, y: y1 + gap, width: bw, height: Math.max(0, h - gap), fill: series[si].color });
+        svgTitle(node, g.label + ' · ' + series[si].name + ': ' + (Math.round(v * 100) / 100) + (opts.unit === 'h' ? ' h' : ''));
+        svg.appendChild(node);
+        acc += v; topY = y1;
+      });
+    } else {
+      g.vals.forEach(function(v, si){
+        var x = x0 + si * (bw + 2);
+        if (!(v > 0)) return;
+        var y1 = yOf(v), h = base - y1;
+        var node = svgNode('path', { d: roundTopPath(x, y1, bw, h, 4), fill: series[si].color });
+        svgTitle(node, g.label + ' · ' + series[si].name + ': ' + v);
+        svg.appendChild(node);
+        if (y1 < topY) topY = y1;
+      });
+    }
+    var cap = opts.capLabel ? opts.capLabel(g, gi) : null;
+    if (cap) svg.appendChild(svgText(x0 + groupW / 2, topY - 7, cap, { 'text-anchor': 'middle', fill: RP_C.ink, 'font-weight': 600 }));
+    if (gi % every === 0) svg.appendChild(svgText(x0 + groupW / 2, H - 9, g.label, { 'text-anchor': 'middle' }));
+  });
+  if (opts.ref) {
+    var ry = yOf(opts.ref.v);
+    svg.appendChild(svgNode('line', { x1: padL, x2: W - padR, y1: ry, y2: ry, stroke: RP_C.bad, 'stroke-width': 1.5 }));
+    svg.appendChild(svgText(W - padR, ry - 6, opts.ref.label, { 'text-anchor': 'end', fill: RP_C.bad, 'font-weight': 600 }));
+  }
+  return el('div', { 'class': 'rp-fig' }, svg);
+}
+
+/* Horizontal stacked bars: rows [{l, segs:[{v, c, name}]}] */
+function rpHBars(rows){
+  var max = Math.max.apply(null, rows.map(function(r){ return sum(r.segs.map(function(s){ return s.v; })); })) || 1;
+  return el('div', { 'class': 'rp-fig' }, rows.map(function(r){
+    var total = sum(r.segs.map(function(s){ return s.v; }));
+    return el('div', { 'class': 'rp-hb' }, [
+      el('div', { 'class': 'l' }, r.l),
+      el('div', { 'class': 't' }, r.segs.filter(function(s){ return s.v > 0; }).map(function(s){
+        return el('i', { style: 'width:' + (s.v / max * 100) + '%;background:' + s.c, title: r.l + ' · ' + s.name + ': ' + s.v });
+      })),
+      el('div', { 'class': 'n' }, String(total))
+    ]);
+  }));
+}
 
 function viewReports(main){
   var R = state.rep || (state.rep = { client: null, from: addDays(todayYmd(), -27), to: todayYmd() });
   if (!R.client) { var tim = state.data.clients.find(function(c){ return c.name === 'Tim'; }); R.client = tim ? tim.id : (state.data.clients[0] || {}).id; }
   var client = clientById(R.client);
+  var cname = client ? client.name : '';
+  var org = state.data.settings.org_name || 'Astar Health Service';
 
-  main.appendChild(el('div', { 'class': 'section-head', style: 'margin:6px 0 12px;flex-wrap:wrap' }, [
+  /* ---- screen-only controls ---- */
+  main.appendChild(el('div', { 'class': 'section-head rp-controls', style: 'margin:6px 0 12px;flex-wrap:wrap' }, [
     el('div', { 'class': 't-display' }, 'Reports'),
-    el('div', { 'class': 'rp-controls', style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
+    el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
+      el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ window.print(); } }, [svgIcon(IC.file), 'Print / save as PDF']),
       el('button', { 'class': 'btn btn-pri btn-sm', onclick: openExportOptions }, [svgIcon(IC.file), 'Export'])
     ])
   ]));
-  main.appendChild(el('div', { 'class': 'rp-controls', style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px' }, [
+  main.appendChild(el('div', { 'class': 'rp-controls', style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px' }, [
     el('div', { 'class': 'field', style: 'margin:0;min-width:160px' }, [ el('label', null, 'Participant'),
       el('select', { 'class': 'sel', onchange: function(e){ R.client = e.target.value; render(); } }, state.data.clients.map(function(c){ return el('option', { value: c.id, selected: c.id === R.client }, c.name); })) ]),
     el('div', { 'class': 'field', style: 'margin:0' }, [ el('label', null, 'From'), el('input', { 'class': 'inp', type: 'date', value: R.from, onchange: function(e){ R.from = e.target.value; render(); } }) ]),
@@ -324,16 +418,16 @@ function viewReports(main){
       return el('button', { onclick: function(){ R.from = addDays(todayYmd(), -p[0]); R.to = todayYmd(); render(); } }, p[1]);
     }))
   ]));
-  main.appendChild(el('p', { 'class': 't-mut', style: 'margin:0 0 14px;font-size:14px' }, (client ? client.name : '') + ' · ' + fmtDateFull(R.from) + ' to ' + fmtDateFull(R.to) + '. Every figure below is a count from a dated worker record in this app (incident reports, near miss logs, personal care logs, overnight summaries).'));
 
   /* ---- gather ---- */
   function inRange(d){ return d && d >= R.from && d <= R.to; }
+  function evDate(i){ return i.incident_date || (i.created_at || '').slice(0, 10); }
+  function nmDate(n){ return n.nm_date || (n.created_at || '').slice(0, 10); }
   var shifts = state.data.shifts.filter(function(s){ return s.client_id === R.client && inRange(s.date); });
   var byId = {}; shifts.forEach(function(s){ byId[s.id] = s; });
-  var days = {}; shifts.forEach(function(s){ days[s.date] = 1; }); var nDays = Object.keys(days).length;
-  var incs = state.data.incidents.filter(function(i){ return i.participant_id === R.client && inRange(i.incident_date || (i.created_at || '').slice(0, 10)); });
+  var incs = state.data.incidents.filter(function(i){ return i.participant_id === R.client && inRange(evDate(i)); });
   var falls = incs.filter(function(i){ return i.is_fall; });
-  var nms = state.data.nearMisses.filter(function(n){ return n.participant_id === R.client && inRange(n.nm_date || (n.created_at || '').slice(0, 10)); });
+  var nms = state.data.nearMisses.filter(function(n){ return n.participant_id === R.client && inRange(nmDate(n)); });
   var care = state.data.careLogs.filter(function(l){ return byId[l.shift_id]; });
   var nights = state.data.overnightLogs.filter(function(l){ return byId[l.shift_id]; }).map(function(l){
     return { d: byId[l.shift_id].date, asleep: evNumVal(l.asleep_hours), active: evNumVal(l.active_hours), wakes: l.wakes || 0, bed: l.bed_time, up: l.wake_time };
@@ -343,133 +437,151 @@ function viewReports(main){
   var secondPerson = falls.filter(function(i){ return i.second_person_needed; });
   var floorMins = sum(falls.map(function(i){ return i.minutes_on_floor || 0; }));
   var equip = incs.filter(function(i){ return i.equipment_involved || (i.incident_types || []).indexOf('Equipment failure') >= 0; }).length + nms.filter(function(n){ return n.equipment_factor; }).length;
+  var nmCap = nms.filter(function(n){ return n.single_worker_capacity; }).length;
   var over = nights.map(function(n){ return Math.max(0, n.active - 2); });
   var nightsOver = nights.filter(function(n){ return n.active > 2; }).length;
-
-  /* ---- KPIs ---- */
-  main.appendChild(el('div', { 'class': 'rp-grid' }, [
-    rpKpi(String(falls.length), 'falls', falls.length ? 'bad' : null),
-    rpKpi(String(nms.length), 'near misses', nms.length ? 'warnc' : null),
-    rpKpi(String(secondPerson.length), 'falls needing a 2nd person'),
-    rpKpi(String(emerg.length), '000 / emergency calls'),
-    rpKpi(nights.length ? hrsFmt(avg(nights.map(function(n){ return n.active; }))) + ' h' : '—', 'avg active support per night (11pm–7am)'),
-    rpKpi(nights.length ? pct(nightsOver, nights.length) : '—', 'nights over the 2 h sleepover allowance')
-  ]));
-
-  /* ---- weekly falls & near misses ---- */
-  var weeks = []; for (var w = mondayOf(R.from); w <= R.to; w = addDays(w, 7)) weeks.push(w);
-  function wk(d){ return mondayOf(d); }
-  var cols = weeks.map(function(w0){
-    var w1 = addDays(w0, 6);
-    return { l: fmtDM(w0), bars: [
-      { v: falls.filter(function(i){ return wk(i.incident_date || i.created_at.slice(0, 10)) === w0; }).length, cls: 'bad' },
-      { v: nms.filter(function(n){ return wk(n.nm_date || n.created_at.slice(0, 10)) === w0; }).length, cls: 'warn' }
-    ] };
-  });
-  main.appendChild(rpCard('Falls and near misses per week', 'Falls from incident reports; near misses from the near miss log.', [
-    rpVBars(cols), rpLegend([{ c: 'var(--bad)', l: 'Falls' }, { c: 'var(--warnc)', l: 'Near misses' }])
-  ]));
-
-  /* ---- where ---- */
-  var locCount = {};
-  falls.forEach(function(i){ var k = i.fall_location || 'Not recorded'; locCount[k] = locCount[k] || { f: 0, n: 0 }; locCount[k].f++; });
-  nms.forEach(function(n){ var k = n.location || 'Not recorded'; locCount[k] = locCount[k] || { f: 0, n: 0 }; locCount[k].n++; });
-  var locRows = Object.keys(locCount).map(function(k){ return { l: k, v: locCount[k].f + locCount[k].n, txt: locCount[k].f + ' / ' + locCount[k].n }; }).sort(function(a, b){ return b.v - a.v; });
+  var periodDays = Math.round((pd(R.to) - pd(R.from)) / 86400000) + 1;
   var transferEvents = falls.filter(function(i){ return TRANSFER_LOCS.indexOf(i.fall_location) >= 0; }).length + nms.filter(function(n){ return TRANSFER_LOCS.indexOf(n.location) >= 0; }).length;
-  main.appendChild(rpCard('Where falls and near misses happen', 'Count shown as falls / near misses. ' + transferEvents + ' of ' + (falls.length + nms.length) + ' events occurred during a transfer.', [ rpHBars(locRows, null, 'warn') ]));
+  var totalRecords = incs.length + nms.length + care.length + nights.length;
 
-  /* ---- overnight ---- */
-  var onCard = rpCard('Overnight support inside the sleepover block (11pm to 7am)', 'Each bar is one night: grey = asleep, teal = active support, red = active support above the 2 hours included in the sleepover rate.', []);
-  if (!nights.length) onCard.appendChild(el('div', { 'class': 'notice' }, 'No overnight summaries recorded in this period.'));
+  var doc = el('div', { 'class': 'rp-doc' });
+  main.appendChild(doc);
+
+  /* ---- masthead ---- */
+  doc.appendChild(el('div', { 'class': 'rp-mast' }, [
+    el('div', { 'class': 'rp-eyebrow' }, org + ' · Support needs summary'),
+    el('h2', null, cname),
+    el('p', { 'class': 'rp-period' }, fmtDateFull(R.from) + ' to ' + fmtDateFull(R.to) + ' · ' + periodDays + ' days'),
+    el('div', { 'class': 'rp-meta' }, [
+      el('div', null, [ el('div', { 'class': 'k' }, 'Shifts in period'), el('div', { 'class': 'v' }, String(shifts.length)) ]),
+      el('div', null, [ el('div', { 'class': 'k' }, 'Records this report is built from'), el('div', { 'class': 'v' }, totalRecords + ' · ' + incs.length + ' incident, ' + nms.length + ' near miss, ' + care.length + ' care, ' + nights.length + ' overnight') ]),
+      el('div', null, [ el('div', { 'class': 'k' }, 'Prepared'), el('div', { 'class': 'v' }, fmtDateFull(todayYmd())) ]),
+      el('div', null, [ el('div', { 'class': 'k' }, 'Prepared by'), el('div', { 'class': 'v' }, org) ])
+    ])
+  ]));
+
+  /* ---- 1. at a glance ---- */
+  doc.appendChild(rpSec(1, 'At a glance',
+    'The headline figures for the period. Every number is a count of dated records the support worker entered on shift, never an estimate.', [
+    el('div', { 'class': 'rp-grid' }, [
+      rpTile('Falls', String(falls.length), falls.length ? secondPerson.length + ' needed a second person to get up' : 'No falls recorded in this period'),
+      rpTile('Near misses', String(nms.length), nms.length ? nmCap + ' at or beyond what one worker can manage' : 'A fall or injury prevented with no harm'),
+      rpTile('000 / emergency calls', String(emerg.length), emerg.length ? emerg.map(function(i){ return fmtDate(evDate(i)); }).join(', ') : 'None in this period'),
+      rpTile('Minutes on the floor', String(floorMins), falls.length ? 'across ' + falls.length + ' fall' + (falls.length === 1 ? '' : 's') + ' · average ' + hrsFmt(floorMins / falls.length) + ' min' : 'No falls recorded'),
+      rpTile('Active support per night', nights.length ? hrsFmt(avg(nights.map(function(n){ return n.active; }))) + ' h' : '—', nights.length ? 'average inside the 11pm to 7am block · ' + nights.length + ' night' + (nights.length === 1 ? '' : 's') + ' recorded' : 'No overnight summaries recorded'),
+      rpTile('Nights over the 2 h allowance', nights.length ? pct(nightsOver, nights.length) : '—', nights.length ? nightsOver + ' of ' + nights.length + ' nights · ' + hrsFmt(sum(over)) + ' h over in total' : 'The sleepover price includes 2 h of active support')
+    ])
+  ]));
+
+  /* ---- 2. weekly ---- */
+  var weeks = []; for (var w = mondayOf(R.from); w <= R.to; w = addDays(w, 7)) weeks.push(w);
+  var wkRows = weeks.map(function(w0){
+    return { w: w0, f: falls.filter(function(i){ return mondayOf(evDate(i)) === w0; }).length, n: nms.filter(function(n){ return mondayOf(nmDate(n)) === w0; }).length };
+  });
+  var wkSeries = [{ name: 'Falls', color: RP_C.bad }, { name: 'Near misses', color: RP_C.warn }];
+  doc.appendChild(rpSec(2, 'Falls and near misses by week',
+    'Falls come from incident reports and near misses from the near miss log. Weeks start on Monday. A week with no column had no recorded events.',
+    (falls.length + nms.length) ? [
+      rpColumns(wkRows.map(function(r){ return { label: fmtDM(r.w), vals: [r.f, r.n] }; }), wkSeries, { capLabel: function(g){ var m = Math.max(g.vals[0], g.vals[1]); return m ? String(m) : null; } }),
+      rpLegend([{ c: RP_C.bad, l: 'Falls' }, { c: RP_C.warn, l: 'Near misses' }]),
+      rpTable([ 'Week commencing', { t: 'Falls', n: true }, { t: 'Near misses', n: true }, { t: 'Total', n: true } ],
+        wkRows.map(function(r){ return [ fmtDateFull(r.w), { t: String(r.f), n: true }, { t: String(r.n), n: true }, { t: String(r.f + r.n), n: true } ]; })
+          .concat([[ 'Period total', { t: String(falls.length), n: true }, { t: String(nms.length), n: true }, { t: String(falls.length + nms.length), n: true } ]]))
+    ] : [ rpEmpty('No falls or near misses recorded', 'Workers log near misses from the shift card and falls through the incident report.') ]));
+
+  /* ---- 3. where ---- */
+  var loc = {};
+  falls.forEach(function(i){ var k = i.fall_location || 'Not recorded'; loc[k] = loc[k] || { f: 0, n: 0 }; loc[k].f++; });
+  nms.forEach(function(n){ var k = n.location || 'Not recorded'; loc[k] = loc[k] || { f: 0, n: 0 }; loc[k].n++; });
+  var locRows = Object.keys(loc).map(function(k){ return { l: k, f: loc[k].f, n: loc[k].n }; }).sort(function(a, b){ return (b.f + b.n) - (a.f + a.n); });
+  doc.appendChild(rpSec(3, 'Where falls and near misses happen',
+    'Location as recorded on each incident report or near miss entry. Transfers are the moments a single worker is most stretched.',
+    locRows.length ? [
+      el('div', { 'class': 'rp-call' }, [ el('b', null, transferEvents + ' of ' + (falls.length + nms.length)), 'events happened during a transfer' ]),
+      rpHBars(locRows.map(function(r){ return { l: r.l, segs: [ { v: r.f, c: RP_C.bad, name: 'Falls' }, { v: r.n, c: RP_C.warn, name: 'Near misses' } ] }; })),
+      rpLegend([{ c: RP_C.bad, l: 'Falls' }, { c: RP_C.warn, l: 'Near misses' }]),
+      rpTable([ 'Location', { t: 'Falls', n: true }, { t: 'Near misses', n: true }, 'During a transfer' ],
+        locRows.map(function(r){ return [ r.l, { t: String(r.f), n: true }, { t: String(r.n), n: true }, { t: TRANSFER_LOCS.indexOf(r.l) >= 0 ? 'Yes' : '', m: true } ]; }))
+    ] : [ rpEmpty('No locations to show', 'Locations appear here once a fall or near miss has been recorded.') ]));
+
+  /* ---- 4. overnight ---- */
+  var onKids = [];
+  if (!nights.length) onKids.push(rpEmpty('No overnight summaries recorded', 'The sleepover worker fills the overnight summary from the shift card after each night.'));
   else {
-    /* fixed 720-unit canvas so a handful of nights doesn't get blown up to poster size */
-    var W = Math.max(720, nights.length * 26 + 40), H = 170, top = 10, bottom = 26, plotH = H - top - bottom;
-    var slot = (W - 40) / nights.length, bw = Math.max(6, Math.min(28, slot - 6));
-    var svg = svgNode('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', style: 'max-width:100%;height:auto;display:block' });
-    for (var g = 0; g <= 8; g += 2) {
-      var gy = top + plotH - (g / 8) * plotH;
-      svg.appendChild(svgNode('line', { x1: 30, x2: W, y1: gy, y2: gy, stroke: '#e6e2da', 'stroke-width': 1 }));
-      var lbl = svgNode('text', { x: 24, y: gy + 4, 'font-size': 9, fill: '#8a857c', 'text-anchor': 'end' }); lbl.textContent = g + 'h'; svg.appendChild(lbl);
-    }
-    var ly = top + plotH - (2 / 8) * plotH;
-    svg.appendChild(svgNode('line', { x1: 30, x2: W, y1: ly, y2: ly, stroke: '#b3261e', 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }));
-    nights.forEach(function(n, i){
-      var x = 34 + i * slot + (slot - bw) / 2;
-      var hA = (Math.min(n.asleep, 8) / 8) * plotH, hX = (Math.min(n.active, 8 - n.asleep) / 8) * plotH;
-      var yBase = top + plotH;
-      svg.appendChild(svgNode('rect', { x: x, y: yBase - hA, width: bw, height: hA, fill: '#d9d4ca' }));
-      var inAllow = Math.min(n.active, 2), overA = Math.max(0, n.active - 2);
-      var hIn = (inAllow / 8) * plotH, hOver = (overA / 8) * plotH;
-      svg.appendChild(svgNode('rect', { x: x, y: yBase - hA - hIn, width: bw, height: hIn, fill: '#0e7568' }));
-      if (hOver > 0) svg.appendChild(svgNode('rect', { x: x, y: yBase - hA - hIn - hOver, width: bw, height: hOver, fill: '#b3261e' }));
-      if (nights.length <= 16 || i % Math.ceil(nights.length / 16) === 0) {
-        var t = svgNode('text', { x: x + bw / 2, y: H - 8, 'font-size': 9, fill: '#8a857c', 'text-anchor': 'middle' }); t.textContent = fmtDM(n.d); svg.appendChild(t);
-      }
-    });
-    onCard.appendChild(svg);
-    onCard.appendChild(rpLegend([{ c: '#d9d4ca', l: 'Asleep' }, { c: '#0e7568', l: 'Active support (within 2 h allowance)' }, { c: '#b3261e', l: 'Active support above the allowance' }]));
-    var tbl = el('table', { 'class': 'rp-tbl', style: 'margin-top:12px' }, [
-      el('tr', null, [ el('th', null, 'Nights recorded'), el('th', null, 'Avg asleep'), el('th', null, 'Avg active support'), el('th', null, 'Nights over 2 h'), el('th', null, 'Hours over the allowance (total)'), el('th', null, 'Avg wakes'), el('th', null, 'Avg time up for the day') ]),
-      el('tr', null, [
-        el('td', { 'class': 'n' }, String(nights.length)),
-        el('td', { 'class': 'n' }, hrsFmt(avg(nights.map(function(n){ return n.asleep; }))) + ' h'),
-        el('td', { 'class': 'n' }, hrsFmt(avg(nights.map(function(n){ return n.active; }))) + ' h'),
-        el('td', { 'class': 'n' }, nightsOver + ' of ' + nights.length + ' (' + pct(nightsOver, nights.length) + ')'),
-        el('td', { 'class': 'n' }, hrsFmt(sum(over)) + ' h'),
-        el('td', { 'class': 'n' }, hrsFmt(avg(nights.map(function(n){ return n.wakes; })))),
-        el('td', { 'class': 'n' }, avgTimeLabel(nights.map(function(n){ return n.up; })))
-      ])
-    ]);
-    onCard.appendChild(el('div', { style: 'overflow-x:auto' }, tbl));
-    /* wake-for-the-day distribution */
+    var onSeries = [{ name: 'Asleep', color: RP_C.dim }, { name: 'Active support within the 2 h allowance', color: RP_C.acc }, { name: 'Active support above the allowance', color: RP_C.bad }];
+    onKids.push(rpColumns(nights.map(function(n){
+      var inA = Math.min(n.active, 2), ov = Math.max(0, n.active - 2);
+      return { label: fmtDM(n.d), vals: [ Math.min(n.asleep, 8), Math.min(inA, Math.max(0, 8 - n.asleep)), Math.min(ov, Math.max(0, 8 - n.asleep - inA)) ], over: ov };
+    }), onSeries, { stacked: true, yMax: 8, unit: 'h', ref: { v: 2, label: '2 h included in the sleepover rate' }, capLabel: function(g){ return g.over > 0 ? '+' + hrsFmt(g.over) + ' h' : null; } }));
+    onKids.push(rpLegend(onSeries.map(function(s){ return { c: s.color, l: s.name }; })));
+    onKids.push(el('div', { 'class': 'rp-mini' }, [
+      [ 'Nights recorded', String(nights.length) ],
+      [ 'Average asleep', hrsFmt(avg(nights.map(function(n){ return n.asleep; }))) + ' h' ],
+      [ 'Average active support', hrsFmt(avg(nights.map(function(n){ return n.active; }))) + ' h' ],
+      [ 'Nights over 2 h', nightsOver + ' of ' + nights.length + ' (' + pct(nightsOver, nights.length) + ')' ],
+      [ 'Hours over the allowance', hrsFmt(sum(over)) + ' h' ],
+      [ 'Average wakes before up', hrsFmt(avg(nights.map(function(n){ return n.wakes; }))) ],
+      [ 'Average bed time', avgTimeLabel(nights.map(function(n){ return n.bed; })) ],
+      [ 'Average up for the day', avgTimeLabel(nights.map(function(n){ return n.up; })) ]
+    ].map(function(p){ return el('div', null, [ el('div', { 'class': 'k' }, p[0]), el('div', { 'class': 'v' }, p[1]) ]); })));
     var buckets = {};
-    nights.forEach(function(n){ if (!n.up) return; var mn = tMin(n.up); var b = Math.floor(mn / 30) * 30; var k = pad2(Math.floor(b / 60)) + ':' + pad2(b % 60); buckets[k] = (buckets[k] || 0) + 1; });
+    nights.forEach(function(n){ if (!n.up) return; var b = Math.floor(tMin(n.up) / 30) * 30; var k = pad2(Math.floor(b / 60)) + ':' + pad2(b % 60); buckets[k] = (buckets[k] || 0) + 1; });
     var bk = Object.keys(buckets).sort();
     if (bk.length) {
-      onCard.appendChild(el('div', { 'class': 't-label', style: 'margin:14px 0 6px' }, 'What time he is up for the day'));
-      onCard.appendChild(rpVBars(bk.map(function(k){ return { l: fmtTime(k), bars: [{ v: buckets[k], cls: '' }] }; })));
+      onKids.push(rpSub('What time ' + firstName(cname) + ' is up for the day (nights per half hour)'));
+      onKids.push(rpColumns(bk.map(function(k){ return { label: fmtTime(k), vals: [buckets[k]] }; }), [{ name: 'Nights', color: RP_C.acc }], { height: 160, capLabel: function(g){ return String(g.vals[0]); } }));
     }
+    onKids.push(rpSub('Night by night'));
+    onKids.push(rpTable([ 'Night', 'Bed', 'Up for the day', { t: 'Wakes', n: true }, { t: 'Asleep', n: true }, { t: 'Active', n: true }, { t: 'Over 2 h', n: true } ],
+      nights.map(function(n){ return [ fmtDate(n.d), n.bed ? fmtTime(n.bed) : '—', n.up ? fmtTime(n.up) : '—', { t: String(n.wakes), n: true }, { t: hrsFmt(n.asleep) + ' h', n: true }, { t: hrsFmt(n.active) + ' h', n: true }, { t: n.active > 2 ? '+' + hrsFmt(n.active - 2) + ' h' : '—', n: true } ]; })));
   }
-  main.appendChild(onCard);
+  doc.appendChild(rpSec(4, 'Overnight support inside the sleepover block (11pm to 7am)',
+    'The NDIS sleepover price includes up to 2 hours of active support a night. Each column is one night: grey is time asleep, teal is active support within the allowance, red is active support above it.', onKids, 'rp-sec-long'));
 
-  /* ---- personal care ---- */
+  /* ---- 5. personal care ---- */
   var padW = sum(care.map(function(l){ return l.pad_wet; })), padB = sum(care.map(function(l){ return l.pad_bowel; })), bedW = sum(care.map(function(l){ return l.bed_wet; })), bedC = sum(care.map(function(l){ return l.bedding_changes; }));
   var shOff = care.filter(function(l){ return l.shower_offered; }), shDone = shOff.filter(function(l){ return l.shower_done; }), shDecl = shOff.length - shDone.length;
   var promptsAvg = shOff.length ? avg(shOff.map(function(l){ return l.shower_prompts; })) : 0;
   var refusals = sum(care.map(function(l){ return l.care_refusals; })), transfers = sum(care.map(function(l){ return l.transfers; })), unsafe = sum(care.map(function(l){ return l.transfer_unsafe_alone; }));
   var careDays = {}; care.forEach(function(l){ careDays[byId[l.shift_id].date] = 1; }); var nCareDays = Object.keys(careDays).length || 1;
-  function row(l, v, note){ return el('tr', null, [ el('td', null, l), el('td', { 'class': 'n' }, v), el('td', { style: 'color:var(--mut)' }, note || '') ]); }
-  main.appendChild(rpCard('Personal care and manual handling load', care.length ? care.length + ' care logs across ' + Object.keys(careDays).length + ' days.' : 'No care logs recorded in this period.', care.length ? [
-    el('div', { style: 'overflow-x:auto' }, el('table', { 'class': 'rp-tbl' }, [
-      el('tr', null, [ el('th', null, 'Measure'), el('th', null, 'Total'), el('th', null, 'Per day') ]),
-      row('Pad changes (wet + bowel)', String(padW + padB), hrsFmt((padW + padB) / nCareDays) + ' per day'),
-      row('Bowel movement changes', String(padB), hrsFmt(padB / nCareDays) + ' per day'),
-      row('Found wet in bed', String(bedW), bedW ? pct(care.filter(function(l){ return l.bed_wet > 0; }).length, nCareDays) + ' of days' : ''),
-      row('Bedding changes', String(bedC), ''),
-      row('Showers offered / done / declined', shOff.length + ' / ' + shDone.length + ' / ' + shDecl, shOff.length ? pct(shDecl, shOff.length) + ' declined' : ''),
-      row('Average prompts before a shower is accepted', hrsFmt(promptsAvg), ''),
-      row('Other care refusals needing prompting', String(refusals), hrsFmt(refusals / nCareDays) + ' per day'),
-      row('Assisted transfers', String(transfers), hrsFmt(transfers / nCareDays) + ' per day'),
-      row('Transfers one worker could not do safely alone', String(unsafe), transfers ? pct(unsafe, transfers) + ' of transfers' : '')
-    ]))
-  ] : []));
+  function pd1(v){ return { t: hrsFmt(v / nCareDays), n: true }; }
+  doc.appendChild(rpSec(5, 'Personal care and manual handling load',
+    care.length ? 'From ' + care.length + ' personal care logs across ' + Object.keys(careDays).length + ' day' + (Object.keys(careDays).length === 1 ? '' : 's') + '. Per-day figures divide by the days that have a log.' : 'One personal care log is expected per shift.',
+    care.length ? [
+      rpTable([ 'Measure', { t: 'Total', n: true }, { t: 'Per day', n: true }, 'Note' ], [
+        [ 'Pad changes (wet and bowel)', { t: String(padW + padB), n: true }, pd1(padW + padB), '' ],
+        [ 'Bowel movement changes', { t: String(padB), n: true }, pd1(padB), '' ],
+        [ 'Found wet in bed', { t: String(bedW), n: true }, pd1(bedW), { t: bedW ? pct(care.filter(function(l){ return l.bed_wet > 0; }).length, nCareDays) + ' of days' : '', m: true } ],
+        [ 'Bedding changes', { t: String(bedC), n: true }, pd1(bedC), '' ],
+        [ 'Showers offered / done / declined', { t: shOff.length + ' / ' + shDone.length + ' / ' + shDecl, n: true }, { t: '', n: true }, { t: shOff.length ? pct(shDecl, shOff.length) + ' declined at first' : '', m: true } ],
+        [ 'Prompts before a shower is accepted', { t: hrsFmt(promptsAvg), n: true }, { t: '', n: true }, { t: 'average', m: true } ],
+        [ 'Other care refusals needing prompting', { t: String(refusals), n: true }, pd1(refusals), '' ],
+        [ 'Assisted transfers', { t: String(transfers), n: true }, pd1(transfers), '' ],
+        [ 'Transfers one worker could not do safely alone', { t: String(unsafe), n: true }, pd1(unsafe), { t: transfers ? pct(unsafe, transfers) + ' of transfers' : '', m: true } ]
+      ])
+    ] : [ rpEmpty('No personal care logs recorded', 'Workers fill the care log from the shift card. Pad changes, showers, prompting and transfers appear here once logged.') ]));
 
-  /* ---- 2:1 evidence ---- */
-  main.appendChild(rpCard('Evidence for a second worker (2:1)', 'Events where one worker was not enough to keep the participant safe.', [
-    el('div', { style: 'overflow-x:auto' }, el('table', { 'class': 'rp-tbl' }, [
-      el('tr', null, [ el('th', null, 'Measure'), el('th', null, 'Count'), el('th', null, '') ]),
-      row('Falls where a second person was needed to get up', String(secondPerson.length), falls.length ? pct(secondPerson.length, falls.length) + ' of falls' : ''),
-      row('Total minutes on the floor waiting for help', String(floorMins), falls.length ? 'avg ' + hrsFmt(floorMins / falls.length) + ' min per fall' : ''),
-      row('000 / emergency service calls', String(emerg.length), emerg.length ? emerg.map(function(i){ return fmtDM(i.incident_date || i.created_at.slice(0, 10)); }).join(', ') : ''),
-      row('Near misses at or beyond one worker\'s capacity', String(nms.filter(function(n){ return n.single_worker_capacity; }).length), nms.length ? 'of ' + nms.length + ' near misses' : ''),
-      row('Falls and near misses during transfers', String(transferEvents), ''),
-      row('Transfers logged as unsafe for one worker', String(unsafe), ''),
-      row('Injuries recorded', String(injuries.length), ''),
-      row('Equipment involved or failed', String(equip), '')
-    ]))
+  /* ---- 6. 2:1 ---- */
+  doc.appendChild(rpSec(6, 'Evidence for a second worker (2:1)',
+    'Events where one worker was not enough to keep ' + firstName(cname) + ' safe, drawn from the same records as the sections above.', [
+    rpTable([ 'Measure', { t: 'Count', n: true }, 'Context' ], [
+      [ 'Falls where a second person was needed to get up', { t: String(secondPerson.length), n: true }, { t: falls.length ? pct(secondPerson.length, falls.length) + ' of falls' : 'no falls recorded', m: true } ],
+      [ 'Minutes on the floor waiting for help', { t: String(floorMins), n: true }, { t: falls.length ? 'average ' + hrsFmt(floorMins / falls.length) + ' min per fall' : '', m: true } ],
+      [ '000 / emergency service calls', { t: String(emerg.length), n: true }, { t: emerg.length ? emerg.map(function(i){ return fmtDate(evDate(i)); }).join(', ') : '', m: true } ],
+      [ 'Near misses at or beyond one worker’s capacity', { t: String(nmCap), n: true }, { t: nms.length ? 'of ' + nms.length + ' near misses' : '', m: true } ],
+      [ 'Falls and near misses during a transfer', { t: String(transferEvents), n: true }, { t: (falls.length + nms.length) ? pct(transferEvents, falls.length + nms.length) + ' of events' : '', m: true } ],
+      [ 'Transfers logged as unsafe for one worker', { t: String(unsafe), n: true }, { t: transfers ? pct(unsafe, transfers) + ' of ' + transfers + ' transfers' : '', m: true } ],
+      [ 'Injuries recorded', { t: String(injuries.length), n: true }, '' ],
+      [ 'Equipment involved or failed', { t: String(equip), n: true }, { t: 'wheelchair, shower chair, bed or hoist', m: true } ]
+    ])
   ]));
 
-  main.appendChild(el('p', { 'class': 't-cap', style: 'margin:6px 0 24px' }, 'Method: figures are counts of contemporaneous records entered by the support worker on shift in Astar Care (incident reports, near miss logs, personal care logs and overnight summaries), each traceable to a dated shift. Overnight hours are measured inside the 11:00pm to 7:00am sleepover block, which includes 2 hours of active support in the NDIS sleepover price. Full shift notes are available on request.'));
+  /* ---- method ---- */
+  doc.appendChild(el('div', { 'class': 'rp-method' }, [
+    el('b', null, 'How to read this report. '),
+    'Every figure is a count of contemporaneous records entered by the support worker on shift in Astar Care (incident reports, near miss logs, personal care logs and overnight summaries), each traceable to a dated shift. Nothing is extracted or inferred from the free-text shift notes. Overnight hours are measured inside the 11:00pm to 7:00am sleepover block, which includes 2 hours of active support in the NDIS sleepover price. Periods with no records show as empty rather than as zero events. Full shift notes and the underlying records are available on request.'
+  ]));
+  doc.appendChild(el('div', { 'class': 'rp-foot' }, [ el('span', null, org + ' · Support needs summary · ' + cname), el('span', null, fmtDateFull(R.from) + ' to ' + fmtDateFull(R.to) + ' · prepared ' + fmtDateFull(todayYmd())) ]));
 }
 function avgTimeLabel(times){
   var mins = times.filter(Boolean).map(function(t){ return tMin(t); });
