@@ -392,7 +392,8 @@ function viewTeam(main){
         el('div', { 'class': 't-sub', style: 'color:' + c.colour }, c.name),
         el('button', { 'class': 'btn btn-sm btn-ghost', style: 'min-height:28px;padding:2px 10px;font-size:12px', onclick: function(){ openClientModal(c); } }, 'Edit client')
       ]),
-      el('div', { 'class': 't-cap', style: 'display:flex;align-items:center;gap:4px;margin:4px 0 10px' }, [svgIcon(IC.pin), c.address + ' · geofence ' + (c.radius_m || 200) + ' m']),
+      el('div', { 'class': 't-cap', style: 'display:flex;align-items:center;gap:4px;margin:4px 0 4px' }, [svgIcon(IC.pin), c.address + ' · geofence ' + (c.radius_m || 200) + ' m']),
+      el('div', { 'class': 't-cap', style: 'display:flex;align-items:center;gap:4px;margin:0 0 10px' }, [svgIcon(IC.send), clientContactLine(c)]),
       el('div', { style: 'display:flex;flex-direction:column;gap:6px' }, reqs.map(function(r){
         return el('div', { style: 'display:flex;gap:10px;align-items:center;font-size:13.5px;flex-wrap:wrap' }, [
           el('span', { 'class': 'tag ' + (r.type === 'sleepover' ? 'tag-sleep' : 'tag-day') }, r.type === 'sleepover' ? 'Sleepover' : 'Day'),
@@ -408,10 +409,20 @@ function viewTeam(main){
   main.appendChild(sec);
 }
 
+/* who the weekly roster goes to, for the Team card */
+function clientContactLine(c){
+  var bits = [];
+  if (c.contact_name) bits.push(c.contact_name);
+  if (c.contact_phone) bits.push(c.contact_phone);
+  if (c.contact_email) bits.push(c.contact_email);
+  return bits.length ? 'Roster goes to ' + bits.join(' \u00b7 ') : 'No roster contact yet \u2014 add one to send them the weekly roster';
+}
+
 /* ---------- client editor ---------- */
 function openClientModal(c){
   var f = { name: c ? c.name : '', address: c ? c.address : '', colour: c ? c.colour : '#0e7568',
-    radius_m: c ? (c.radius_m || 200) : 200, lat: c && c.lat != null ? String(c.lat) : '', lng: c && c.lng != null ? String(c.lng) : '' };
+    radius_m: c ? (c.radius_m || 200) : 200, lat: c && c.lat != null ? String(c.lat) : '', lng: c && c.lng != null ? String(c.lng) : '',
+    contact_name: c && c.contact_name ? c.contact_name : '', contact_email: c && c.contact_email ? c.contact_email : '', contact_phone: c && c.contact_phone ? c.contact_phone : '' };
   function fld(label, key, type, hint){
     return el('div', { 'class': 'field' }, [
       el('label', null, label),
@@ -439,6 +450,13 @@ function openClientModal(c){
           el('label', null, 'Colour'),
           el('input', { type: 'color', value: f.colour, style: 'width:64px;height:44px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);padding:4px', onchange: function(e){ f.colour = e.target.value; } })
         ])
+      ]),
+      el('div', { 'class': 't-label', style: 'margin:4px 0 8px' }, 'Roster contact'),
+      el('div', { 'class': 'hint', style: 'margin:-4px 0 12px' }, 'Who receives this client\u2019s weekly roster from Roster \u2192 Send roster (the participant, a family member or their coordinator). Optional.'),
+      fld('Contact name', 'contact_name'),
+      el('div', { 'class': 'grid2' }, [
+        fld('Contact email', 'contact_email', 'email'),
+        fld('Contact mobile (WhatsApp)', 'contact_phone', 'tel')
       ])
     ]),
     el('div', { 'class': 'modal-foot' }, [
@@ -448,7 +466,8 @@ function openClientModal(c){
         if (!f.name.trim() || !f.address.trim()) { toast('Name and address, please.', true); return; }
         var rec = { name: f.name.trim(), address: f.address.trim(), colour: f.colour,
           radius_m: parseInt(f.radius_m, 10) || 200,
-          lat: f.lat === '' ? null : parseFloat(f.lat), lng: f.lng === '' ? null : parseFloat(f.lng) };
+          lat: f.lat === '' ? null : parseFloat(f.lat), lng: f.lng === '' ? null : parseFloat(f.lng),
+          contact_name: f.contact_name.trim() || null, contact_email: f.contact_email.trim().toLowerCase() || null, contact_phone: f.contact_phone.trim() || null };
         busyBtn(e.currentTarget, true);
         (c ? sbUpd('ac_clients', 'id=eq.' + c.id, rec) : sbIns('ac_clients', [rec]))
           .then(function(){ closeModal(); toast(c ? f.name + ' updated' : f.name + ' added — now add their shift types'); refresh(); })

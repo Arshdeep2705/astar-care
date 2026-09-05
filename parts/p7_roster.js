@@ -620,7 +620,68 @@ function openReminder(s, w){
 }
 
 /* ---------- send roster ---------- */
-function openSendRoster(){
+/* the client-side message: every shift for the client in the range, grouped by
+   day, worker first names only. Copy for WhatsApp, or open WhatsApp / email. */
+function clientRosterMsg(c, from, to){
+  var days = rosterDays();
+  var out = [];
+  days.forEach(function(d){
+    var todays = state.data.shifts.filter(function(s){ return s.client_id === c.id && s.date === d; })
+      .sort(function(a, b){ return tMin(a.start_t) - tMin(b.start_t); });
+    if (!todays.length) { out.push(fmtDate(d) + ': no shift'); return; }
+    todays.forEach(function(s){
+      var w = s.worker_id ? workerById(s.worker_id) : null;
+      out.push(fmtDate(d) + ': ' + fmtRange(s.start_t, s.end_t) + (s.type === 'sleepover' ? ' (sleepover)' : '') + ' \u2013 ' + (w ? firstName(w.name) : 'worker to be confirmed'));
+    });
+  });
+  var who = c.contact_name ? firstName(c.contact_name) : firstName(c.name);
+  return 'Hi ' + who + ', here is ' + firstName(c.name) + '\u2019s support roster for ' + fmtDate(from) + ' \u2013 ' + fmtDate(to) + ':\n\n' + out.join('\n') + '\n\nIf anything needs to change, please let the office know.\n\nAstar Health Service';
+}
+function copyText(txt, btn){
+  function done(){ if (btn) { btn.textContent = 'Copied \u2713'; setTimeout(function(){ btn.textContent = 'Copy'; }, 1800); } toast('Copied \u2014 paste it into WhatsApp or a message'); }
+  function fallback(){
+    var ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { toast('Could not copy \u2014 long-press the text to select it', true); }
+    document.body.removeChild(ta);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done)["catch"](fallback);
+  else fallback();
+}
+function waHref(phone, msg){
+  var digits = (phone || '').replace(/\D/g, '');
+  if (digits.length === 10 && digits.charAt(0) === '0') digits = '61' + digits.slice(1); // 04xx xxx xxx -> 614xx
+  return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(msg);
+}
+function sendRosterClients(body, from, to){
+  var clients = state.data.clients.filter(function(c){
+    return c.active !== false && state.data.shifts.some(function(s){ return s.client_id === c.id && s.date >= from && s.date <= to; });
+  });
+  body.appendChild(el('p', { 'class': 't-mut', style: 'font-size:14px;margin-bottom:14px' },
+    'Each client (or their family / coordinator) gets who is coming and when for ' + fmtDate(from) + ' \u2013 ' + fmtDate(to) + '. Copy it into WhatsApp or any message, or open WhatsApp / email straight from here.'));
+  if (!clients.length) body.appendChild(el('div', { 'class': 'notice' }, 'No shifts in this range yet.'));
+  clients.forEach(function(c){
+    var msg = clientRosterMsg(c, from, to);
+    var n = state.data.shifts.filter(function(s){ return s.client_id === c.id && s.date >= from && s.date <= to; }).length;
+    var contact = (c.contact_name || c.contact_phone || c.contact_email)
+      ? [c.contact_name, c.contact_phone, c.contact_email].filter(Boolean).join(' \u00b7 ')
+      : 'No contact saved \u2014 Team \u2192 Edit client to add one (WhatsApp still opens so you can pick the person)';
+    body.appendChild(el('div', { 'class': 'card card-pad', style: 'margin-bottom:10px;padding:14px 16px;border-left:4px solid ' + c.colour }, [
+      el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:8px' }, [
+        el('span', { 'class': 'avatar', style: 'background:' + c.colour }, initials(c.name)),
+        el('div', { style: 'flex:1;min-width:0' }, [ el('b', null, c.name), el('div', { 'class': 't-cap' }, n + ' shift' + (n === 1 ? '' : 's') + ' \u00b7 ' + contact) ])
+      ]),
+      el('div', { 'class': 'notice', style: 'white-space:pre-wrap;font-size:12.5px;max-height:140px;overflow:auto;overscroll-behavior:contain' }, msg),
+      el('div', { style: 'display:flex;gap:8px;margin-top:10px;flex-wrap:wrap' }, [
+        el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(e){ copyText(msg, e.currentTarget); } }, 'Copy'),
+        el('a', { 'class': 'btn btn-sm btn-sec', href: waHref(c.contact_phone, msg), target: '_blank', rel: 'noopener', style: 'text-decoration:none' }, 'WhatsApp'),
+        el('a', { 'class': 'btn btn-sm btn-sec', href: 'mailto:' + encodeURIComponent(c.contact_email || '') + '?subject=' + encodeURIComponent(firstName(c.name) + '\u2019s roster ' + fmtDM(from) + ' \u2013 ' + fmtDM(to)) + '&body=' + encodeURIComponent(msg), target: '_blank', style: 'text-decoration:none' }, 'Email')
+      ])
+    ]));
+  });
+}
+function openSendRoster(mode){
+  mode = mode || 'workers';
   var days = rosterDays();
   var from = days[0], to = days[days.length - 1];
   var perWorker = {};
@@ -629,6 +690,12 @@ function openSendRoster(){
     (perWorker[s.worker_id] = perWorker[s.worker_id] || []).push(s);
   });
   var body = el('div', { 'class': 'modal-body' });
+  body.appendChild(el('div', { 'class': 'seg', style: 'margin-bottom:14px' }, [
+    el('button', { 'class': mode === 'workers' ? 'on' : '', onclick: function(){ closeModal(); openSendRoster('workers'); } }, 'Workers'),
+    el('button', { 'class': mode === 'clients' ? 'on' : '', onclick: function(){ closeModal(); openSendRoster('clients'); } }, 'Clients & families')
+  ]));
+  if (mode === 'clients') { sendRosterClients(body, from, to); }
+  else {
   body.appendChild(el('p', { 'class': 't-mut', style: 'font-size:14px;margin-bottom:14px' },
     'Each worker gets their own shifts for ' + fmtDate(from) + ' – ' + fmtDate(to) + ' as an in-app message, an email, or both.'));
   var workers = state.data.workers.filter(function(w){ return !w.is_admin && w.active && perWorker[w.id]; });
@@ -657,6 +724,7 @@ function openSendRoster(){
       ])
     ]));
   });
+  }
   var m = el('div', { 'class': 'modal', style: 'max-width:520px' }, [
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
