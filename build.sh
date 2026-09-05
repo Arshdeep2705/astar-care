@@ -5,7 +5,7 @@
 cd "$(dirname "$0")"
 cat parts/p1_head.html parts/p2_core.js parts/p3_shell.js parts/p4_worker.js \
     parts/p5_note_incident.js parts/p6_calendar.js parts/p7_roster.js \
-    parts/p8_admin_rest.js > index.html
+    parts/p8_admin_rest.js parts/p9_evidence.js > index.html
 printf '</script>\n</body>\n</html>\n' >> index.html
 mkdir -p admin
 # stamp the build version (drives the auto-reload of stale installed apps)

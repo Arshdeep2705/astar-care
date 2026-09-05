@@ -264,7 +264,13 @@ function openIncidentModal(opts){
     emergency: ir ? (ir.emergency || []).slice() : [],
     injuries: ir ? ir.injuries : 'No',
     injury_who: ir ? ir.injury_who : '',
-    injury_kind: ir ? ir.injury_kind : ''
+    injury_kind: ir ? ir.injury_kind : '',
+    is_fall: ir ? (ir.is_fall ? 'Yes' : 'No') : 'No',
+    fall_location: ir ? (ir.fall_location || '') : '',
+    second_person_needed: ir ? (ir.second_person_needed ? 'Yes' : 'No') : 'No',
+    minutes_on_floor: ir && ir.minutes_on_floor != null ? String(ir.minutes_on_floor) : '',
+    equipment_involved: ir ? (ir.equipment_involved ? 'Yes' : 'No') : 'No',
+    equipment_desc: ir ? (ir.equipment_desc || '') : ''
   };
   var pendingPhotos = [];
   var existingPhotos = ir ? (ir.property_photos || []).slice() : [];
@@ -313,6 +319,35 @@ function openIncidentModal(opts){
     return wrap;
   }
 
+  /* fall details — feed the admin Reports tab (falls, 2:1 need, equipment) */
+  function fallBlock(){
+    var det = el('div', { style: f.is_fall === 'No' ? 'display:none' : '' });
+    var locSel = el('select', { 'class': 'sel', onchange: function(e){ f.fall_location = e.target.value; } },
+      [el('option', { value: '' }, 'Choose…')].concat(NM_LOCATIONS.map(function(l){ return el('option', { value: l, selected: f.fall_location === l }, l); })));
+    var eqDet = el('div', { style: f.equipment_involved === 'No' ? 'display:none' : '' },
+      el('div', { 'class': 'field' }, [ el('label', null, 'Which equipment, and what happened to it'),
+        el('input', { 'class': 'inp', value: f.equipment_desc, oninput: function(e){ f.equipment_desc = e.target.value; } }) ]));
+    function yn(label, key, onchg){
+      return el('div', { 'class': 'field' }, [ el('label', { style: 'display:block;font-size:14px;font-weight:600;margin:0 0 6px' }, label),
+        el('div', { style: 'display:flex;gap:16px' }, ['No', 'Yes'].map(function(o){
+          return el('label', { 'class': 'radiorow', style: 'margin:0' }, [
+            el('input', { type: 'radio', name: 'fb_' + key, checked: f[key] === o, onchange: function(){ f[key] = o; if (onchg) onchg(); } }),
+            el('span', { style: 'font-size:14px' }, o) ]);
+        })) ]);
+    }
+    det.appendChild(el('div', { 'class': 'field' }, [ el('label', null, 'Where did the fall happen'), locSel ]));
+    det.appendChild(yn('Was a second person needed to get the participant up?', 'second_person_needed'));
+    det.appendChild(el('div', { 'class': 'field' }, [ el('label', null, 'Minutes on the floor before being helped up'),
+      el('input', { 'class': 'inp', type: 'number', min: '0', inputmode: 'numeric', value: f.minutes_on_floor, oninput: function(e){ f.minutes_on_floor = e.target.value; } }) ]));
+    det.appendChild(yn('Was equipment involved (wheelchair, shower chair, bed, hoist)?', 'equipment_involved', function(){ eqDet.style.display = f.equipment_involved === 'No' ? 'none' : ''; }));
+    det.appendChild(eqDet);
+    return el('div', { 'class': 'card', style: 'padding:12px 16px;margin-bottom:14px;background:var(--paper);box-shadow:none;border:0' }, [
+      el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Fall details'),
+      yn('Did this incident involve a fall?', 'is_fall', function(){ det.style.display = f.is_fall === 'No' ? 'none' : ''; }),
+      det
+    ]);
+  }
+
   /* conditional sections */
   var secRestrictive = el('div', { style: f.restrictive === 'No' ? 'display:none' : '' },
     multiQ(9, 'Type of unauthorised restrictive practice', 'restrictive_types', RESTRICTIVE_TYPES));
@@ -345,6 +380,7 @@ function openIncidentModal(opts){
         el('input', { 'class': 'inp', type: 'time', value: f.incident_time, onchange: function(e){ f.incident_time = e.target.value; } }) ])
     ]),
     multiQ(7, 'What type of incident is this', 'incident_types', INCIDENT_TYPES),
+    fallBlock(),
     choiceQ(8, 'Was there any unauthorised use of restricted practice', 'restrictive', ['No', Q8_YES], function(){
       secRestrictive.style.display = f.restrictive === 'No' ? 'none' : '';
     }),
@@ -396,6 +432,12 @@ function openIncidentModal(opts){
         injuries: f.injuries,
         injury_who: f.injuries === 'No' ? '' : f.injury_who,
         injury_kind: f.injuries === 'No' ? '' : f.injury_kind,
+        is_fall: f.is_fall === 'Yes',
+        fall_location: f.is_fall === 'Yes' ? f.fall_location : '',
+        second_person_needed: f.is_fall === 'Yes' && f.second_person_needed === 'Yes',
+        minutes_on_floor: f.is_fall === 'Yes' && f.minutes_on_floor !== '' ? parseInt(f.minutes_on_floor, 10) : null,
+        equipment_involved: f.is_fall === 'Yes' && f.equipment_involved === 'Yes',
+        equipment_desc: f.is_fall === 'Yes' && f.equipment_involved === 'Yes' ? f.equipment_desc : '',
         updated_at: new Date().toISOString()
       };
       if (editing) {

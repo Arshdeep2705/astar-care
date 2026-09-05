@@ -385,6 +385,26 @@ function openAdminShift(s){
     }
     body.appendChild(kv);
   }
+  /* evidence logs */
+  {
+    var nms = nearMissesForShift(s.id), cl = careLogForShift(s.id), ol = overnightLogForShift(s.id);
+    body.appendChild(el('div', { 'class': 't-label', style: 'margin:16px 0 8px' }, 'Evidence logs'));
+    body.appendChild(el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
+      el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openNearMissModal({ shift: s, worker: w || me() }); } }, 'Near miss' + (nms.length ? ' (' + nms.length + ')' : '')),
+      el('button', { 'class': 'btn btn-sm ' + (cl ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openCareLogModal({ shift: s, worker: w || me() }); } }, cl ? 'Care log ✓' : 'Care log'),
+      s.type === 'sleepover' ? el('button', { 'class': 'btn btn-sm ' + (ol ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openOvernightModal({ shift: s, worker: w || me() }); } }, ol ? 'Overnight ✓' : 'Overnight summary') : null
+    ]));
+    nms.forEach(function(nm){
+      body.appendChild(el('button', { 'class': 'listnote', style: 'display:flex;gap:10px;width:100%;text-align:left;margin-top:6px', onclick: function(){ openNearMissModal({ nearMiss: nm, shift: s, worker: w }); } }, [
+        el('span', { style: 'color:var(--warnc);display:flex;margin-top:2px' }, svgIcon(IC.alert)),
+        el('div', { style: 'flex:1;min-width:0' }, [
+          el('b', { style: 'font-size:13.5px' }, 'Near miss' + (nm.nm_time ? ' · ' + fmtTime(nm.nm_time) : '') + (nm.location ? ' · ' + nm.location : '')),
+          el('div', { 'class': 't-cap', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, nm.description)
+        ]),
+        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Read / edit')
+      ]));
+    });
+  }
   /* notes */
   body.appendChild(el('div', { 'class': 't-label', style: 'margin:16px 0 8px' }, 'Shift notes'));
   if (!notes.length) body.appendChild(el('div', { 'class': 'notice' }, 'No note written for this shift yet.'));

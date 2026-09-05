@@ -210,14 +210,30 @@ function shiftCard(s, w, opts){
   }
 
   /* actions */
-  card.appendChild(el('div', { 'class': 'sc-actions' }, [
+  var nearMisses = nearMissesForShift(s.id);
+  var careLog = careLogForShift(s.id);
+  var onLog = overnightLogForShift(s.id);
+  card.appendChild(el('div', { 'class': 'sc-actions', style: 'flex-wrap:wrap' }, [
     el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(){ openNoteModal({ shift: s, worker: w }); } }, [svgIcon(IC.plus), 'Add note']),
-    el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openIncidentModal({ shift: s, worker: w }); } }, 'Incident report')
+    el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openIncidentModal({ shift: s, worker: w }); } }, 'Incident report'),
+    el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openNearMissModal({ shift: s, worker: w }); } }, 'Near miss'),
+    el('button', { 'class': 'btn btn-sm ' + (careLog ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openCareLogModal({ shift: s, worker: w }); } }, careLog ? 'Care log ✓' : 'Care log'),
+    s.type === 'sleepover' ? el('button', { 'class': 'btn btn-sm ' + (onLog ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openOvernightModal({ shift: s, worker: w }); } }, onLog ? 'Overnight ✓' : 'Overnight summary') : null
   ]));
 
-  /* attached notes & incident reports */
-  if (notes.length || incidents.length) {
+  /* attached notes, incident reports & near misses */
+  if (notes.length || incidents.length || nearMisses.length) {
     var att = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
+    nearMisses.forEach(function(nm){
+      att.appendChild(el('button', { 'class': 'listnote', style: 'display:flex;align-items:center;gap:8px;width:100%;text-align:left', onclick: function(){ openNearMissModal({ nearMiss: nm, shift: s, worker: w }); } }, [
+        el('span', { style: 'color:var(--warnc);flex:none;display:flex' }, svgIcon(IC.alert)),
+        el('div', { style: 'flex:1;min-width:0' }, [
+          el('b', { style: 'font-size:13.5px' }, 'Near miss' + (nm.nm_time ? ' · ' + fmtTime(nm.nm_time) : '')),
+          el('div', { 'class': 't-cap', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, (nm.location ? nm.location + ' · ' : '') + (nm.description || ''))
+        ]),
+        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Open')
+      ]));
+    });
     notes.forEach(function(n){
       att.appendChild(el('button', { 'class': 'listnote', style: 'display:flex;align-items:center;gap:8px;width:100%;text-align:left', onclick: function(){ openNoteModal({ note: n, shift: s, worker: w }); } }, [
         el('span', { style: 'color:var(--acc);flex:none;display:flex' }, svgIcon(IC.note)),

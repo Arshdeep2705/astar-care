@@ -312,7 +312,7 @@ var state = {
   loading: true,
   loadErr: null,
   pwChange: null,       // {token, workerId, name} during forced password change
-  data: { settings:null, clients:[], reqs:[], workers:[], shifts:[], notes:[], incidents:[], reminders:[], flags:[], avail:[], clocks:[], invoices:[], enums:{} }
+  data: { settings:null, clients:[], reqs:[], workers:[], shifts:[], notes:[], incidents:[], reminders:[], flags:[], avail:[], clocks:[], invoices:[], enums:{}, nearMisses:[], careLogs:[], overnightLogs:[] }
 };
 var ui = {};            // scratch for modal state
 
@@ -360,12 +360,16 @@ function loadAll(){
     sbSel('ac_availability', 'select=*'),
     sbSel('ac_clock', 'select=*&order=at'),
     sbSel('ac_invoices', 'select=*'),
-    sbSel('ac_enums', 'select=*')
+    sbSel('ac_enums', 'select=*'),
+    sbSel('ac_near_misses', 'select=*&order=created_at.desc&limit=2000'),
+    sbSel('ac_care_logs', 'select=*&limit=5000'),
+    sbSel('ac_overnight_logs', 'select=*&limit=5000')
   ]).then(function(r){
     D.settings = r[0][0] || { org_name:'Astar Health Service', km_rate:0.99, week_anchor: mondayOf(todayYmd()), fortnight_anchor: mondayOf(todayYmd()) };
     D.clients = r[1]; D.reqs = r[2]; D.workers = r[3]; D.shifts = r[4];
     D.notes = r[5]; D.incidents = r[6]; D.reminders = r[7]; D.flags = r[8];
     D.avail = r[9]; D.clocks = r[10]; D.invoices = r[11];
+    D.nearMisses = r[13] || []; D.careLogs = r[14] || []; D.overnightLogs = r[15] || [];
     D.enums = {};
     (r[12] || []).forEach(function(e){ D.enums[e.name] = e.values; });
     state.loading = false;
@@ -395,6 +399,9 @@ function shiftById(id){ return state.data.shifts.find(function(s){ return s.id =
 function notesForShift(id){ return state.data.notes.filter(function(n){ return n.shift_id === id; }); }
 function incidentsForShift(id){ return state.data.incidents.filter(function(n){ return n.shift_id === id; }); }
 function clocksForShift(id){ return state.data.clocks.filter(function(c){ return c.shift_id === id; }); }
+function nearMissesForShift(id){ return state.data.nearMisses.filter(function(n){ return n.shift_id === id; }); }
+function careLogForShift(id){ return state.data.careLogs.find(function(n){ return n.shift_id === id; }) || null; }
+function overnightLogForShift(id){ return state.data.overnightLogs.find(function(n){ return n.shift_id === id; }) || null; }
 function remindersForShift(id){ return state.data.reminders.filter(function(r){ return r.shift_id === id; }); }
 function me(){
   if (state.preview) return workerById(state.preview);

@@ -256,6 +256,7 @@ function adminNavItems(){
     { id: 'inbox', label: 'Inbox', ic: IC.inbox },
     { id: 'avail', label: 'Availability', ic: IC.clock },
     { id: 'pay', label: 'Pay', ic: IC.pay },
+    { id: 'reports', label: 'Reports', ic: IC.file },
     { id: 'team', label: 'Team', ic: IC.users }
   ];
 }
@@ -278,6 +279,7 @@ function renderAdmin(app){
   else if (state.adminTab === 'inbox') viewInbox(main);
   else if (state.adminTab === 'avail') viewAdminAvail(main);
   else if (state.adminTab === 'pay') viewPay(main);
+  else if (state.adminTab === 'reports') viewReports(main);
   else if (state.adminTab === 'team') viewTeam(main);
   app.appendChild(main);
   app.appendChild(bottomNav(items, state.adminTab, function(id){ state.adminTab = id; render(); }));
