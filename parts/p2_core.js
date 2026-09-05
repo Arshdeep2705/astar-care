@@ -308,7 +308,7 @@ var state = {
   preview: null,        // worker id when admin previews worker view
   cal: { mode: 'month', anchor: todayYmd() },
   roster: { range: 'week', anchor: mondayOf(todayYmd()), client: 'all' },
-  pay: { anchor: null },
+  pay: { anchor: null, mode: 'fortnight', wk: null, mo: null, from: null, to: null, client: 'all' },
   loading: true,
   loadErr: null,
   pwChange: null,       // {token, workerId, name} during forced password change

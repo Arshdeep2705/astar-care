@@ -286,19 +286,67 @@ function shiftPay(s){
   return { flat: true, base: flat, extraH: extraH, extra: Math.round(extraH * hourly * 100) / 100, hourly: hourly };
 }
 
+/* the pay period: fortnight (pay cycle, default) / week / calendar month / custom dates */
+function payRange(){
+  var P = state.pay;
+  if (P.mode === 'week') { var wk = P.wk || (P.wk = mondayOf(todayYmd())); return { from: wk, to: addDays(wk, 6), label: 'Week ' + fmtDate(wk) + ' – ' + fmtDate(addDays(wk, 6)) }; }
+  if (P.mode === 'month') {
+    var mo = P.mo || (P.mo = todayYmd().slice(0, 7) + '-01');
+    var d = pd(mo); var last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return { from: mo, to: ymd(last), label: MON[d.getMonth()] + ' ' + d.getFullYear() };
+  }
+  if (P.mode === 'custom') {
+    if (!P.from || !P.to) { var f0 = fortStart(); P.from = P.from || f0; P.to = P.to || addDays(f0, 13); }
+    var a = P.from <= P.to ? P.from : P.to, b = P.from <= P.to ? P.to : P.from;
+    return { from: a, to: b, label: fmtDate(a) + ' – ' + fmtDate(b) };
+  }
+  var fs = fortStart(); P.anchor = fs;
+  return { from: fs, to: addDays(fs, 13), label: 'Fortnight ' + fmtDate(fs) + ' – ' + fmtDate(addDays(fs, 13)) };
+}
+function payStep(dir){
+  var P = state.pay;
+  if (P.mode === 'week') P.wk = addDays(P.wk, 7 * dir);
+  else if (P.mode === 'month') { var d = pd(P.mo); d.setMonth(d.getMonth() + dir); P.mo = ymd(d).slice(0, 7) + '-01'; }
+  else if (P.mode === 'custom') { var span = Math.round((pd(P.to) - pd(P.from)) / 86400000) + 1; P.from = addDays(P.from, span * dir); P.to = addDays(P.to, span * dir); }
+  else P.anchor = addDays(fortStart(), 14 * dir);
+  render();
+  var r = payRange(); ensureWindow(dir < 0 ? r.from : r.to);
+}
+
 function viewPay(main){
-  var fs = fortStart();
-  state.pay.anchor = fs;
-  var fe = addDays(fs, 13);
+  var P = state.pay;
+  var R = payRange(), fs = R.from, fe = R.to;
+  var onlyClient = P.client !== 'all' ? clientById(P.client) : null;
+  if (P.client !== 'all' && !onlyClient) { P.client = 'all'; }
   main.appendChild(el('div', { style: 'margin:6px 0 16px' }, el('div', { 'class': 't-display' }, 'Pay')));
   main.appendChild(el('div', { 'class': 'cal-head' }, [
-    el('button', { 'class': 'iconbtn', onclick: function(){ state.pay.anchor = addDays(fs, -14); render(); ensureWindow(state.pay.anchor); } }, svgIcon(IC.left)),
-    el('button', { 'class': 'iconbtn', onclick: function(){ state.pay.anchor = addDays(fs, 14); render(); ensureWindow(addDays(state.pay.anchor, 13)); } }, svgIcon(IC.right)),
-    el('div', { 'class': 't-sub', style: 'flex:1' }, 'Fortnight ' + fmtDate(fs) + ' – ' + fmtDate(fe)),
+    el('button', { 'class': 'iconbtn', onclick: function(){ payStep(-1); } }, svgIcon(IC.left)),
+    el('button', { 'class': 'iconbtn', onclick: function(){ payStep(1); } }, svgIcon(IC.right)),
+    el('div', { 'class': 't-sub', style: 'flex:1' }, R.label + (onlyClient ? ' · ' + onlyClient.name + ' only' : '')),
     el('span', { 'class': 'tag tag-mut' }, 'ABN · paid fortnightly')
   ]));
+  var ctl = el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 12px' });
+  ctl.appendChild(el('div', { 'class': 'seg' }, [['fortnight', 'Fortnight'], ['week', 'Week'], ['month', 'Month'], ['custom', 'Dates']].map(function(m){
+    return el('button', { 'class': P.mode === m[0] ? 'on' : '', onclick: function(){ P.mode = m[0]; render(); } }, m[1]);
+  })));
+  ctl.appendChild(el('div', { 'class': 'seg' }, [el('button', { 'class': P.client === 'all' ? 'on' : '', onclick: function(){ P.client = 'all'; render(); } }, 'All clients')].concat(
+    state.data.clients.filter(function(c){ return c.active !== false; }).map(function(c){
+      return el('button', { 'class': P.client === c.id ? 'on' : '', style: P.client === c.id ? 'color:' + c.colour : '', onclick: function(){ P.client = c.id; render(); } }, c.name);
+    }))));
+  main.appendChild(ctl);
+  if (P.mode === 'custom') {
+    main.appendChild(el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:0 0 14px' }, [
+      el('div', { 'class': 'field', style: 'margin:0' }, [ el('label', null, 'From'), el('input', { 'class': 'inp', type: 'date', value: P.from, onchange: function(e){ P.from = e.target.value; render(); ensureWindow(P.from); } }) ]),
+      el('div', { 'class': 'field', style: 'margin:0' }, [ el('label', null, 'To'), el('input', { 'class': 'inp', type: 'date', value: P.to, onchange: function(e){ P.to = e.target.value; render(); ensureWindow(P.to); } }) ]),
+      el('div', { 'class': 'hint', style: 'margin:0 0 10px' }, 'Any pay cycle — e.g. a worker’s invoice period.')
+    ]));
+  }
+  function inScope(s){ return s.date >= fs && s.date <= fe && (!onlyClient || s.client_id === onlyClient.id); }
 
   var workers = state.data.workers.filter(function(w){ return !w.is_admin && w.active; });
+  if (onlyClient) workers = workers.filter(function(w){ return state.data.shifts.some(function(s){ return s.worker_id === w.id && inScope(s); }); });
+  var grand = 0, grandN = 0, grandBox = el('div');
+  main.appendChild(grandBox);
   var anyRates = workers.some(function(w){ var r = w.rates || {}; return (r.weekday || r.saturday || r.sunday); });
   if (!anyRates) {
     main.appendChild(el('div', { 'class': 'banner warn', style: 'margin-bottom:14px' }, [
@@ -309,8 +357,9 @@ function viewPay(main){
   main.appendChild(el('div', { 'class': 'hint', style: 'margin-bottom:4px' },
     'Hourly shift types pay the worker’s weekday / Saturday / Sunday rate. Flat shift types (set on the shift type under Team, e.g. Tim’s day $250 and sleepover $150) pay the flat amount per shift, plus any hours beyond the standard length at that shift’s hourly rate (flat ÷ standard hours). A shorter shift is not reduced unless the slot was shared with a second worker, which pays pro-rata. Kilometres come from Mileage notes at ' + money(+(state.data.settings.km_rate || 0)) + '/km.'));
 
+  if (onlyClient && !workers.length) main.appendChild(el('div', { 'class': 'notice', style: 'margin-top:14px' }, 'No shifts for ' + onlyClient.name + ' in this period.'));
   workers.forEach(function(w){
-    var mine = state.data.shifts.filter(function(s){ return s.worker_id === w.id && s.date >= fs && s.date <= fe; });
+    var mine = state.data.shifts.filter(function(s){ return s.worker_id === w.id && inScope(s); });
     var hWd = 0, hSat = 0, hSun = 0, kmSum = 0;
     var flatN = 0, flatAmt = 0, extraH = 0, extraAmt = 0;
     mine.forEach(function(s){
@@ -322,7 +371,7 @@ function viewPay(main){
     state.data.notes.forEach(function(n){
       if (n.worker_id !== w.id || n.note_type !== 'Mileage' || !n.shift_id) return;
       var s = shiftById(n.shift_id);
-      if (!s || s.date < fs || s.date > fe) return;
+      if (!s || !inScope(s)) return;
       var re = /(\d+(?:\.\d+)?)\s*km/ig, mkm;
       while ((mkm = re.exec(n.body || ''))) kmSum += parseFloat(mkm[1]);
     });
@@ -330,11 +379,12 @@ function viewPay(main){
     var kmRate = +(state.data.settings.km_rate || 0);
     var total = hWd * (+r.weekday || 0) + hSat * (+r.saturday || 0) + hSun * (+r.sunday || 0) + flatAmt + extraAmt + kmSum * kmRate;
     var inv = state.data.invoices.find(function(x){ return x.worker_id === w.id && x.fort_start === fs; });
+    grand += total; grandN += mine.length;
 
-    var card = el('div', { 'class': 'card card-pad', style: 'margin-top:14px' });
+    var card = el('div', { 'class': 'card card-pad', style: 'margin-top:14px' + (onlyClient ? ';border-left:4px solid ' + onlyClient.colour : '') });
     card.appendChild(el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:12px' }, [
       el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),
-      el('div', { style: 'flex:1' }, [ el('b', null, w.name), el('div', { 'class': 't-cap' }, mine.length + ' shift' + (mine.length === 1 ? '' : 's') + ' this fortnight') ]),
+      el('div', { style: 'flex:1' }, [ el('b', null, w.name), el('div', { 'class': 't-cap' }, mine.length + ' shift' + (mine.length === 1 ? '' : 's') + (onlyClient ? ' with ' + onlyClient.name : '') + ' this period') ]),
       el('div', { 'class': 't-title t-num' }, money(total))
     ]));
     var grid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px' });
@@ -352,7 +402,7 @@ function viewPay(main){
       ]));
     });
     card.appendChild(grid);
-    card.appendChild(el('label', { 'class': 'checkrow', style: 'margin-top:10px' }, [
+    if (P.mode === 'fortnight' && !onlyClient) card.appendChild(el('label', { 'class': 'checkrow', style: 'margin-top:10px' }, [
       el('input', { type: 'checkbox', checked: !!(inv && inv.received), onchange: function(e){
         sbUpsert('ac_invoices', [{ worker_id: w.id, fort_start: fs, received: e.target.checked }], 'worker_id,fort_start')
           .then(function(){ toast(e.target.checked ? 'Invoice marked received' : 'Invoice unmarked'); refresh(); })
@@ -362,6 +412,10 @@ function viewPay(main){
     ]));
     main.appendChild(card);
   });
+  if (workers.length) grandBox.appendChild(el('div', { 'class': 'card card-pad', style: 'display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--paper)' }, [
+    el('div', { style: 'flex:1' }, [ el('b', null, 'Total for ' + (onlyClient ? onlyClient.name : 'all clients')), el('div', { 'class': 't-cap' }, grandN + ' shift' + (grandN === 1 ? '' : 's') + ' · ' + workers.length + ' worker' + (workers.length === 1 ? '' : 's') + ' · ' + R.label) ]),
+    el('div', { 'class': 't-title t-num' }, money(grand))
+  ]));
 }
 
 /* ================= admin: team ================= */
