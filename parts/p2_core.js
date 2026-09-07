@@ -55,6 +55,7 @@ var NOTE_TYPES = ['Progress Notes','Enquiry','Feedback','Incident','Injury','Mil
 function el(tag, attrs, kids) {
   var n = document.createElement(tag);
   if (attrs) for (var k in attrs) {
+    if (attrs[k] === null || attrs[k] === undefined) continue;
     if (k === 'class') n.className = attrs[k];
     else if (k === 'style') n.style.cssText = attrs[k];
     else if (k === 'html') n.innerHTML = attrs[k];
@@ -397,6 +398,8 @@ function clientById(id){ return state.data.clients.find(function(c){ return c.id
 function workerById(id){ return state.data.workers.find(function(w){ return w.id === id; }); }
 function shiftById(id){ return state.data.shifts.find(function(s){ return s.id === id; }); }
 function notesForShift(id){ return state.data.notes.filter(function(n){ return n.shift_id === id; }); }
+/* the SHIFT NOTE for a shift = any note that is not a Mileage-only entry (mileage is a separate record type) */
+function shiftNotesForShift(id){ return state.data.notes.filter(function(n){ return n.shift_id === id && n.note_type !== 'Mileage'; }); }
 function incidentsForShift(id){ return state.data.incidents.filter(function(n){ return n.shift_id === id; }); }
 function clocksForShift(id){ return state.data.clocks.filter(function(c){ return c.shift_id === id; }); }
 function nearMissesForShift(id){ return state.data.nearMisses.filter(function(n){ return n.shift_id === id; }); }
@@ -598,26 +601,51 @@ function unlockBody(){
   document.body.style.cssText = '';
   window.scrollTo(0, rt.lockY || 0);
 }
+var modalReturnFocus = null;
 function closeModal(){
   var m = document.getElementById('ac-modal');
   if (m) m.remove();
   if (!document.getElementById('ac-modal') && !document.getElementById('ac-confirm')) unlockBody();
+  /* give keyboard focus back to the control that opened the dialog */
+  if (modalReturnFocus && document.body.contains(modalReturnFocus)) { try { modalReturnFocus.focus(); } catch (e) {} }
+  modalReturnFocus = null;
   if (rt.upd) { location.reload(); return; }
   if (rt.pending) scheduleLive();
+}
+var FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+function trapFocus(container){
+  container.addEventListener('keydown', function(e){
+    if (e.key !== 'Tab') return;
+    var f = Array.prototype.filter.call(container.querySelectorAll(FOCUSABLE), function(x){ return x.offsetParent !== null; });
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 }
 function openModal(node, opts){
   closeModal();
   opts = opts || {};
+  modalReturnFocus = document.activeElement;
+  node.setAttribute('role', 'dialog'); node.setAttribute('aria-modal', 'true'); node.setAttribute('tabindex', '-1');
+  var title = node.querySelector('.modal-head .t-title');
+  if (title) { if (!title.id) title.id = 'dlg-' + Math.random().toString(36).slice(2, 8); node.setAttribute('aria-labelledby', title.id); }
   var scrim = el('div', { 'class': 'scrim', id: 'ac-modal', onclick: function(e){ if (e.target === scrim && !opts.noDismiss) closeModal(); } }, node);
+  scrim.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !opts.noDismiss) { e.stopPropagation(); closeModal(); } });
+  trapFocus(node);
   document.body.appendChild(scrim);
   lockBody();
+  /* focus the first field or button in the body, else the dialog itself */
+  var body = node.querySelector('.modal-body') || node;
+  var first = body.querySelector(FOCUSABLE);
+  setTimeout(function(){ try { (first || node).focus({ preventScroll: true }); } catch (e) {} }, 0);
 }
 /* confirm stacks ON TOP of any open modal so Cancel never destroys an editor */
 function confirmDlg(title, body, okLabel, cb, danger){
   var old = document.getElementById('ac-confirm');
   if (old) old.remove();
   function closeConfirm(){ var c = document.getElementById('ac-confirm'); if (c) c.remove(); if (!document.getElementById('ac-modal')) unlockBody(); }
-  var m = el('div', { 'class': 'modal', style: 'max-width:400px' }, [
+  var m = el('div', { 'class': 'modal', style: 'max-width:400px', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': title, tabindex: '-1' }, [
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, el('div', { 'class': 't-title' }, title)),
     el('div', { 'class': 'modal-body' }, el('p', { 'class': 't-mut', style: 'font-size:14px' }, body)),
@@ -628,8 +656,13 @@ function confirmDlg(title, body, okLabel, cb, danger){
     ])
   ]);
   var scrim = el('div', { 'class': 'scrim', id: 'ac-confirm', style: 'z-index:150', onclick: function(e){ if (e.target === scrim) closeConfirm(); } }, m);
+  scrim.addEventListener('keydown', function(e){ if (e.key === 'Escape') { e.stopPropagation(); closeConfirm(); } });
+  trapFocus(m);
+  var prevFocus = document.activeElement;
   document.body.appendChild(scrim);
   lockBody();
+  setTimeout(function(){ var b = m.querySelector('.modal-foot .btn-ghost'); try { (b || m).focus({ preventScroll: true }); } catch (e) {} }, 0);
+  var _close = closeConfirm; closeConfirm = function(){ _close(); if (prevFocus && document.body.contains(prevFocus)) { try { prevFocus.focus(); } catch (e) {} } };
 }
 function busyBtn(btn, on){
   if (on) { btn.dataset.txt = btn.textContent; btn.textContent = 'Saving…'; btn.disabled = true; }

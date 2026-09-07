@@ -36,6 +36,22 @@ function evText(f, key, label, help, long){
 }
 function evNumVal(v){ var n = parseFloat(v); return isNaN(n) ? 0 : n; }
 function evIntVal(v){ var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
+/* blank stays blank: a field the worker did not answer is stored as null ("not recorded"), never as 0 */
+function evIntOrNull(v){ if (v === '' || v == null) return null; var n = parseInt(v, 10); return isNaN(n) ? null : n; }
+function evNumOrNull(v){ if (v === '' || v == null) return null; var n = parseFloat(v); return isNaN(n) ? null : n; }
+/* until migration 002 is applied the database still rejects null counts; fall back to 0 and say so */
+function evSaveWithNullFallback(doSave, rec, zeroKeys){
+  return doSave(rec)["catch"](function(e){
+    if (!/null value|not-null|23502/i.test(e.message || '')) throw e;
+    var rec2 = {}; Object.keys(rec).forEach(function(k){ rec2[k] = rec[k]; });
+    var blanked = [];
+    zeroKeys.forEach(function(k){ if (rec2[k] === null) { rec2[k] = 0; blanked.push(k); } });
+    return doSave(rec2).then(function(r){
+      if (blanked.length) toast('Saved. Blank answers were stored as 0 because the database update that allows "not recorded" is still pending.', true);
+      return r;
+    });
+  });
+}
 
 /* ---------- near miss ---------- */
 function openNearMissModal(opts){
@@ -111,7 +127,7 @@ function openNearMissModal(opts){
         el('div', { 'class': 't-title' }, editing ? 'Edit near miss' : 'Near miss'),
         client ? el('div', { 'class': 't-cap' }, client.name + (shift ? ' · ' + fmtDate(shift.date) : '')) : null
       ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     body,
     el('div', { 'class': 'modal-foot' }, [
@@ -134,38 +150,43 @@ function openCareLogModal(opts){
   var worker = opts.worker || me();
   var client = clientById(shift.client_id);
   var ex = careLogForShift(shift.id);
+  var who = client ? firstName(client.name) : 'the participant';
+  function keep(v){ return v == null ? '' : v; }
   var f = {
-    pad_wet: ex ? ex.pad_wet : '', pad_bowel: ex ? ex.pad_bowel : '', bed_wet: ex ? ex.bed_wet : '', bedding_changes: ex ? ex.bedding_changes : '',
-    shower_offered: ex ? (ex.shower_offered ? 'Yes' : 'No') : (shift.type === 'sleepover' ? 'No' : 'Yes'),
-    shower_done: ex ? (ex.shower_done ? 'Yes' : 'No') : 'No',
-    shower_prompts: ex ? ex.shower_prompts : '',
-    care_refusals: ex ? ex.care_refusals : '', transfers: ex ? ex.transfers : '', transfer_unsafe_alone: ex ? ex.transfer_unsafe_alone : ''
+    pad_wet: ex ? keep(ex.pad_wet) : '', pad_bowel: ex ? keep(ex.pad_bowel) : '', bed_wet: ex ? keep(ex.bed_wet) : '', bedding_changes: ex ? keep(ex.bedding_changes) : '',
+    shower_offered: ex ? (ex.shower_offered ? 'Yes' : 'No') : '',
+    shower_done: ex ? (ex.shower_done ? 'Yes' : 'No') : '',
+    shower_prompts: ex ? keep(ex.shower_prompts) : '',
+    care_refusals: ex ? keep(ex.care_refusals) : '', transfers: ex ? keep(ex.transfers) : '', transfer_unsafe_alone: ex ? keep(ex.transfer_unsafe_alone) : ''
   };
   var showerDet = el('div', { style: f.shower_offered === 'No' ? 'display:none' : '' }, [
     evYesNo(f, 'shower_done', 'Was the shower done?'),
-    evNum(f, 'shower_prompts', 'How many prompts before Tim agreed to the shower', 'Count each time it was offered or he was encouraged before he accepted. If he declined altogether, enter the number of prompts made.')
+    evNum(f, 'shower_prompts', 'How many prompts before ' + who + ' agreed to the shower', 'Count each time it was offered or ' + who + ' was encouraged before accepting. If the shower was declined altogether, enter the number of prompts made.')
   ]);
   var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
   var saveBtn = el('button', { 'class': 'btn btn-pri', onclick: save }, ex ? 'Save changes' : 'Save care log');
   function fail(msg){ errBox.style.display = 'block'; errBox.textContent = msg; busyBtn(saveBtn, false); }
   function save(){
-    if (f.pad_wet === '' && f.pad_bowel === '' && f.transfers === '') return fail('Enter at least the pad changes and transfers for this shift (0 is fine).');
+    if (f.pad_wet === '' && f.pad_bowel === '' && f.transfers === '') return fail('Enter at least the pad changes and transfers for this shift. Type 0 if there were none; leave a box empty only if you did not observe it.');
+    if (f.shower_offered === '') return fail('Say whether a shower was offered this shift.');
+    if (f.shower_offered === 'Yes' && f.shower_done === '') return fail('Say whether the shower was done.');
     errBox.style.display = 'none';
     busyBtn(saveBtn, true);
     var rec = {
-      pad_wet: evIntVal(f.pad_wet), pad_bowel: evIntVal(f.pad_bowel), bed_wet: evIntVal(f.bed_wet), bedding_changes: evIntVal(f.bedding_changes),
+      pad_wet: evIntOrNull(f.pad_wet), pad_bowel: evIntOrNull(f.pad_bowel), bed_wet: evIntOrNull(f.bed_wet), bedding_changes: evIntOrNull(f.bedding_changes),
       shower_offered: f.shower_offered === 'Yes', shower_done: f.shower_offered === 'Yes' && f.shower_done === 'Yes',
-      shower_prompts: f.shower_offered === 'Yes' ? evIntVal(f.shower_prompts) : 0,
-      care_refusals: evIntVal(f.care_refusals), transfers: evIntVal(f.transfers), transfer_unsafe_alone: evIntVal(f.transfer_unsafe_alone),
+      shower_prompts: f.shower_offered === 'Yes' ? evIntOrNull(f.shower_prompts) : null,
+      care_refusals: evIntOrNull(f.care_refusals), transfers: evIntOrNull(f.transfers), transfer_unsafe_alone: evIntOrNull(f.transfer_unsafe_alone),
       updated_at: new Date().toISOString()
     };
+    var zeroKeys = ['pad_wet','pad_bowel','bed_wet','bedding_changes','shower_prompts','care_refusals','transfers','transfer_unsafe_alone'];
     var p;
-    if (ex) p = sbUpd('ac_care_logs', 'id=eq.' + ex.id, rec);
-    else { rec.shift_id = shift.id; rec.participant_id = shift.client_id; rec.worker_id = worker ? worker.id : null; delete rec.updated_at; p = sbIns('ac_care_logs', [rec]); }
+    if (ex) p = evSaveWithNullFallback(function(r){ return sbUpd('ac_care_logs', 'id=eq.' + ex.id, r); }, rec, zeroKeys);
+    else { rec.shift_id = shift.id; rec.participant_id = shift.client_id; rec.worker_id = worker ? worker.id : null; delete rec.updated_at; p = evSaveWithNullFallback(function(r){ return sbIns('ac_care_logs', [r]); }, rec, zeroKeys); }
     p.then(function(){ closeModal(); toast('Care log saved'); refresh(); })["catch"](function(e){ fail(e.message); });
   }
   var body = el('div', { 'class': 'modal-body' }, [
-    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Numbers only, for this shift. These build the personal care and manual handling picture in the reports.'),
+    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Numbers only, for this shift with ' + who + '. Type 0 when something did not happen. Leave a box empty only if you did not observe it — an empty box is recorded as "not recorded", not as 0.'),
     el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Continence'),
     el('div', { 'class': 'grid2' }, [
       evNum(f, 'pad_wet', 'Pad changes (wet)'),
@@ -179,7 +200,7 @@ function openCareLogModal(opts){
     evYesNo(f, 'shower_offered', 'Was a shower offered this shift?', function(){ showerDet.style.display = f.shower_offered === 'No' ? 'none' : ''; }),
     showerDet,
     el('div', { 'class': 't-label', style: 'margin:6px 0 8px' }, 'Refusals and manual handling'),
-    evNum(f, 'care_refusals', 'Other care refusals needing prompting', 'Times Tim declined personal care (pad change, clothing change, toileting) and had to be prompted before accepting.'),
+    evNum(f, 'care_refusals', 'Other care refusals needing prompting', 'Times ' + who + ' declined personal care (pad change, clothing change, toileting) and had to be prompted before accepting.'),
     el('div', { 'class': 'grid2' }, [
       evNum(f, 'transfers', 'Assisted transfers this shift', 'Every couch, wheelchair, bed, toilet, shower chair and vehicle transfer.'),
       evNum(f, 'transfer_unsafe_alone', 'Transfers one worker could not do safely alone', 'Times you needed a second person, or could only manage with real difficulty or risk.')
@@ -193,7 +214,7 @@ function openCareLogModal(opts){
         el('div', { 'class': 't-title' }, 'Personal care log'),
         el('div', { 'class': 't-cap' }, (client ? client.name : '') + ' · ' + fmtDate(shift.date) + ' · ' + fmtRange(shift.start_t, shift.end_t))
       ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     body,
     el('div', { 'class': 'modal-foot' }, [ el('div', { 'class': 'spacer' }), el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'), saveBtn ])
@@ -207,8 +228,9 @@ function openOvernightModal(opts){
   var worker = opts.worker || me();
   var client = clientById(shift.client_id);
   var ex = overnightLogForShift(shift.id);
+  var who = client ? firstName(client.name) : 'the participant';
   var f = {
-    bed_time: ex ? ex.bed_time : '', wake_time: ex ? ex.wake_time : '', wakes: ex ? ex.wakes : '',
+    bed_time: ex ? ex.bed_time : '', wake_time: ex ? ex.wake_time : '', wakes: ex ? (ex.wakes == null ? '' : ex.wakes) : '',
     asleep_hours: ex ? ex.asleep_hours : '', active_hours: ex ? ex.active_hours : ''
   };
   var remain = el('div', { 'class': 'q-help', style: 'margin:-4px 0 12px' });
@@ -226,10 +248,10 @@ function openOvernightModal(opts){
     if (a + x > 8.01) return fail('Asleep plus active hours cannot be more than the 8-hour block (11pm to 7am).');
     errBox.style.display = 'none';
     busyBtn(saveBtn, true);
-    var rec = { bed_time: f.bed_time, wake_time: f.wake_time, wakes: evIntVal(f.wakes), asleep_hours: a, active_hours: x, updated_at: new Date().toISOString() };
+    var rec = { bed_time: f.bed_time, wake_time: f.wake_time, wakes: evIntOrNull(f.wakes), asleep_hours: a, active_hours: x, updated_at: new Date().toISOString() };
     var p;
-    if (ex) p = sbUpd('ac_overnight_logs', 'id=eq.' + ex.id, rec);
-    else { rec.shift_id = shift.id; rec.participant_id = shift.client_id; rec.worker_id = worker ? worker.id : null; delete rec.updated_at; p = sbIns('ac_overnight_logs', [rec]); }
+    if (ex) p = evSaveWithNullFallback(function(r){ return sbUpd('ac_overnight_logs', 'id=eq.' + ex.id, r); }, rec, ['wakes']);
+    else { rec.shift_id = shift.id; rec.participant_id = shift.client_id; rec.worker_id = worker ? worker.id : null; delete rec.updated_at; p = evSaveWithNullFallback(function(r){ return sbIns('ac_overnight_logs', [r]); }, rec, ['wakes']); }
     p.then(function(){ closeModal(); toast('Overnight summary saved'); refresh(); })["catch"](function(e){ fail(e.message); });
   }
   var asleepIn = evNum(f, 'asleep_hours', 'Hours asleep (✓ blocks × 15 min)', null, { step: '0.25' });
@@ -238,12 +260,12 @@ function openOvernightModal(opts){
   activeIn.querySelector('input').addEventListener('input', updRemain);
   updRemain();
   var body = el('div', { 'class': 'modal-body' }, [
-    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Copy these from your paper sleep log for the 11:00pm to 7:00am block. The sleepover rate includes 2 hours of active support; anything above that is what the reports show.'),
+    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Copy these from the paper sleep log for the 11:00pm to 7:00am block. "Active support" means the intervals you were assisting ' + who + ' (X blocks) — not time ' + who + ' was awake without needing you.'),
     el('div', { 'class': 'grid2' }, [
       el('div', { 'class': 'field' }, [ evLabel('Went to bed at'), el('input', { 'class': 'inp', type: 'time', value: f.bed_time, onchange: function(e){ f.bed_time = e.target.value; } }) ]),
       el('div', { 'class': 'field' }, [ evLabel('Up for the day at'), el('input', { 'class': 'inp', type: 'time', value: f.wake_time, onchange: function(e){ f.wake_time = e.target.value; } }) ])
     ]),
-    evNum(f, 'wakes', 'Number of times he woke needing support before he was up for the day'),
+    evNum(f, 'wakes', 'Number of times ' + who + ' woke needing support before being up for the day', 'Type 0 if there were none. Leave empty if you do not know.'),
     el('div', { 'class': 'grid2' }, [ asleepIn, activeIn ]),
     remain,
     errBox
@@ -253,9 +275,9 @@ function openOvernightModal(opts){
     el('div', { 'class': 'modal-head' }, [
       el('div', null, [
         el('div', { 'class': 't-title' }, 'Overnight summary'),
-        el('div', { 'class': 't-cap' }, (client ? client.name : '') + ' · night of ' + fmtDate(shift.date))
+        el('div', { 'class': 't-cap' }, (client ? client.name : '') + ' · night of ' + fmtDate(shift.date) + ' to ' + fmtDate(addDays(shift.date, 1)))
       ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     body,
     el('div', { 'class': 'modal-foot' }, [ el('div', { 'class': 'spacer' }), el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'), saveBtn ])

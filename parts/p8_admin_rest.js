@@ -20,7 +20,7 @@ function viewInbox(main){
           el('div', { style: 'font-size:14px;margin-top:4px;white-space:pre-wrap' }, f.msg),
           el('button', { 'class': 'btn btn-sm btn-sec', style: 'margin-top:10px', onclick: function(){
             sbUpd('ac_flags', 'id=eq.' + f.id, { resolved: true }).then(function(){ toast('Resolved'); refresh(); })["catch"](function(e){ toast(e.message, true); });
-          } }, 'Mark resolved')
+          } }, 'Resolve message')
         ])
       ]));
     });
@@ -30,10 +30,11 @@ function viewInbox(main){
   /* outstanding notes */
   var t = todayYmd();
   var outstanding = state.data.shifts.filter(function(s){
-    return s.worker_id && !s.note_waived && s.date >= addDays(t, -14) && shiftEnded(s) && notesForShift(s.id).length === 0;
+    return s.worker_id && !s.note_waived && s.date >= addDays(t, -14) && shiftEnded(s) && shiftNotesForShift(s.id).length === 0;
   }).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
   var secO = el('div', { 'class': 'section' });
-  secO.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:10px' }, 'Outstanding shift notes'));
+  secO.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:4px' }, 'Outstanding shift notes'));
+  secO.appendChild(el('p', { 'class': 't-cap', style: 'margin-bottom:10px' }, 'Finished shifts from the last 14 days with no Progress Note yet. A mileage-only entry does not count as the shift note. "Waive" stops the reminders for that shift; it does not delete anything.'));
   if (!outstanding.length) {
     secO.appendChild(el('div', { 'class': 'card empty', style: 'padding:24px' }, [
       el('b', null, 'All caught up'),
@@ -49,13 +50,16 @@ function viewInbox(main){
           el('b', { style: 'font-size:14px' }, (c ? c.name : '?') + ' — ' + (w ? w.name : '?')),
           el('div', { 'class': 't-cap t-num' }, fmtDate(s.date) + ' · ' + fmtRange(s.start_t, s.end_t))
         ]),
-        w ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openReminder(s, w); } }, 'Remind') : null,
+        el('div', { 'class': 'row-actions' }, [
+        w ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openReminder(s, w); } }, 'Send reminder') : null,
         el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(e){
-          busyBtn(e.currentTarget, true);
-          sbUpd('ac_shifts', 'id=eq.' + s.id, { note_waived: true })
-            .then(function(){ toast('Cleared — this shift is no longer chased for a note'); refresh(); })
-            ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
-        } }, 'Clear')
+          confirmDlg('Waive the note for this shift?', 'The shift stays on the roster and nothing is deleted. It just stops being chased and drops off this list. You can still add a note later.', 'Waive note', function(){
+            sbUpd('ac_shifts', 'id=eq.' + s.id, { note_waived: true })
+              .then(function(){ toast('Note waived for ' + fmtDate(s.date) + ' — no more reminders for this shift'); refresh(); })
+              ["catch"](function(err){ toast(err.message, true); });
+          });
+        } }, 'Waive note')
+        ])
       ]));
     });
     secO.appendChild(listO);
@@ -70,11 +74,11 @@ function viewInbox(main){
       sbUpd(table, 'id=eq.' + row.id, { seen: true })
         .then(function(){ refresh(); })
         ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
-    } }, 'Done');
+    } }, 'Mark as read');
   }
   function noteRow(n, isNew){
     var w = workerById(n.worker_id), c = clientById(n.participant_id), s = n.shift_id ? shiftById(n.shift_id) : null;
-    return el('div', { style: 'display:flex;gap:6px;align-items:stretch' }, [
+    return el('div', { 'class': 'inbox-item' }, [
       el('button', { 'class': 'listnote', style: 'display:flex;gap:10px;flex:1;min-width:0;text-align:left', onclick: function(){ openNoteModal({ note: n, shift: s, worker: w }); } }, [
         el('span', { style: 'color:var(--acc);display:flex;margin-top:2px' }, svgIcon(IC.note)),
         el('div', { style: 'flex:1;min-width:0' }, [
@@ -87,7 +91,7 @@ function viewInbox(main){
           ]),
           el('div', { 'class': 't-cap', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px' }, notePreview(n.body))
         ]),
-        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Read / edit')
+        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Open')
       ]),
       isNew ? markSeenBtn('ac_note_entries', n) : null
     ]);
@@ -103,7 +107,7 @@ function viewInbox(main){
       sbUpd('ac_note_entries', 'seen=eq.false', { seen: true })
         .then(function(){ toast('All notes marked as read'); refresh(); })
         ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
-    } }, 'Mark all read') : null
+    } }, 'Mark all as read') : null
   ]));
   if (!state.data.notes.length) secN.appendChild(el('div', { 'class': 'notice' }, 'No notes yet.'));
   else {
@@ -122,7 +126,7 @@ function viewInbox(main){
   /* latest incidents — same unread-first pattern */
   function irRow(ir, isNew){
     var w = workerById(ir.worker_id), c = clientById(ir.participant_id), s = ir.shift_id ? shiftById(ir.shift_id) : null;
-    return el('div', { style: 'display:flex;gap:6px;align-items:stretch' }, [
+    return el('div', { 'class': 'inbox-item' }, [
       el('button', { 'class': 'listnote', style: 'display:flex;gap:10px;flex:1;min-width:0;text-align:left', onclick: function(){ openIncidentModal({ incident: ir, shift: s, worker: w }); } }, [
         el('span', { style: 'color:var(--warnc);display:flex;margin-top:2px' }, svgIcon(IC.alert)),
         el('div', { style: 'flex:1;min-width:0' }, [
@@ -134,7 +138,7 @@ function viewInbox(main){
           ]),
           el('div', { 'class': 't-cap', style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px' }, ir.ticket_desc)
         ]),
-        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Read / edit')
+        el('span', { 'class': 't-cap', style: 'flex:none' }, 'Open')
       ]),
       isNew ? markSeenBtn('ac_incident_forms', ir) : null
     ]);
@@ -329,8 +333,8 @@ function viewPay(main){
   if (P.client !== 'all' && !onlyClient) { P.client = 'all'; }
   main.appendChild(el('div', { style: 'margin:6px 0 16px' }, el('div', { 'class': 't-display' }, 'Pay')));
   main.appendChild(el('div', { 'class': 'cal-head' }, [
-    el('button', { 'class': 'iconbtn', onclick: function(){ payStep(-1); } }, svgIcon(IC.left)),
-    el('button', { 'class': 'iconbtn', onclick: function(){ payStep(1); } }, svgIcon(IC.right)),
+    el('button', { 'class': 'iconbtn', 'aria-label': 'Previous pay period', onclick: function(){ payStep(-1); } }, svgIcon(IC.left)),
+    el('button', { 'class': 'iconbtn', 'aria-label': 'Next pay period', onclick: function(){ payStep(1); } }, svgIcon(IC.right)),
     el('div', { 'class': 't-sub', style: 'flex:1' }, R.label + (onlyClient ? ' · ' + onlyClient.name + ' only' : '')),
     el('span', { 'class': 'tag tag-mut' }, 'ABN · paid fortnightly')
   ]));
@@ -519,7 +523,7 @@ function openClientModal(c){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, c ? 'Edit ' + c.name : 'Add client'),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       fld('Name', 'name'),
@@ -588,7 +592,7 @@ function openReqModal(client, r){
         el('div', { 'class': 't-title' }, (r ? 'Edit shift type' : 'Add shift type')),
         el('div', { 'class': 't-cap' }, client.name)
       ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('div', { 'class': 'field' }, [ el('label', null, 'Label'),
@@ -637,7 +641,7 @@ function openWorkerModal(w){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, 'Edit ' + w.name),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('div', { 'class': 'field' }, [ el('label', null, 'Name'),
@@ -684,7 +688,7 @@ function openAddWorker(){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, 'Add worker'),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('div', { 'class': 'field' }, [ el('label', null, 'Name'), el('input', { 'class': 'inp', oninput: function(e){ f.name = e.target.value; } }) ]),
@@ -721,7 +725,7 @@ function openRates(w){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', null, [ el('div', { 'class': 't-title' }, w.name + ' — rates'), el('div', { 'class': 't-cap' }, 'Per hour, for hourly shift types (Allan, Nick). Flat shift types like Tim’s are set on the shift type under Team.') ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       rateField('Weekday ($/h)', 'weekday'),

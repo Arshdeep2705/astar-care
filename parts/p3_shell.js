@@ -222,18 +222,18 @@ function renderWorker(app){
   var items = workerNavItems();
   var hdr = el('div', { 'class': 'hdr' }, el('div', { 'class': 'wrap hdr-in' }, [
     el('div', { 'class': 'brand' }, [ el('span', { 'class': 'brand-mark' }, 'A'), 'Astar Care' ]),
-    el('div', { 'class': 'hdr-tabs' }, items.map(function(it){
-      return el('button', { 'class': 'hdr-tab' + (state.view === it.id ? ' on' : ''), onclick: function(){ state.view = it.id; render(); } }, it.label);
+    el('nav', { 'class': 'hdr-tabs', 'aria-label': 'Main' }, items.map(function(it){
+      return el('button', { 'class': 'hdr-tab' + (state.view === it.id ? ' on' : ''), 'aria-current': state.view === it.id ? 'page' : null, onclick: function(){ state.view = it.id; render(); } }, it.label);
     })),
     el('div', { 'class': 'hdr-side' }, [
       state.preview ? el('button', { 'class': 'btn btn-sm btn-dark', onclick: function(){ state.preview = null; state.view = 'home'; render(); } }, '← Admin') : null,
-      (!state.preview && pushSupported() && !pushEnabled()) ? el('button', { 'class': 'iconbtn', title: 'Turn on notifications', style: 'color:var(--acc)', onclick: enablePush }, svgIcon(IC.bell)) : null,
-      el('span', { 'class': 'avatar', style: 'background:' + w.colour, title: w.name }, initials(w.name)),
-      state.preview ? null : el('button', { 'class': 'iconbtn', title: 'Sign out', onclick: function(){ confirmDlg('Sign out?', 'You can sign back in any time.', 'Sign out', signOut); } }, svgIcon(IC.out))
+      (!state.preview && pushSupported() && !pushEnabled()) ? el('button', { 'class': 'iconbtn', 'aria-label': 'Turn on notifications', title: 'Turn on notifications', style: 'color:var(--acc)', onclick: enablePush }, svgIcon(IC.bell)) : null,
+      el('span', { 'class': 'avatar', style: 'background:' + w.colour, title: w.name, 'aria-label': 'Signed in as ' + w.name, role: 'img' }, initials(w.name)),
+      state.preview ? null : el('button', { 'class': 'iconbtn', 'aria-label': 'Sign out', title: 'Sign out', onclick: function(){ confirmDlg('Sign out?', 'You can sign back in any time.', 'Sign out', signOut); } }, svgIcon(IC.out))
     ])
   ]));
   app.appendChild(hdr);
-  var main = el('div', { 'class': 'wrap main' });
+  var main = el('main', { 'class': 'wrap main' });
   if (state.view === 'home') viewWorkerHome(main, w);
   else if (state.view === 'calendar') viewCalendar(main, w);
   else if (state.view === 'notes') viewMyNotes(main, w);
@@ -243,8 +243,8 @@ function renderWorker(app){
 }
 
 function bottomNav(items, current, go){
-  return el('div', { 'class': 'bnav' }, el('div', { 'class': 'bnav-in' }, items.map(function(it){
-    return el('button', { 'class': 'bnav-btn' + (current === it.id ? ' on' : ''), onclick: function(){ go(it.id); } }, [
+  return el('nav', { 'class': 'bnav', 'aria-label': 'Main' }, el('div', { 'class': 'bnav-in' }, items.map(function(it){
+    return el('button', { 'class': 'bnav-btn' + (current === it.id ? ' on' : ''), 'aria-current': current === it.id ? 'page' : null, onclick: function(){ go(it.id); } }, [
       svgIcon(it.ic), it.label
     ]);
   })));
@@ -264,17 +264,17 @@ function renderAdmin(app){
   var items = adminNavItems();
   var hdr = el('div', { 'class': 'hdr' }, el('div', { 'class': 'wrap hdr-in' }, [
     el('div', { 'class': 'brand' }, [ el('span', { 'class': 'brand-mark' }, 'A'), 'Astar Care' ]),
-    el('div', { 'class': 'hdr-tabs' }, items.map(function(it){
-      return el('button', { 'class': 'hdr-tab' + (state.adminTab === it.id ? ' on' : ''), onclick: function(){ state.adminTab = it.id; render(); } }, it.label);
+    el('nav', { 'class': 'hdr-tabs', 'aria-label': 'Main' }, items.map(function(it){
+      return el('button', { 'class': 'hdr-tab' + (state.adminTab === it.id ? ' on' : ''), 'aria-current': state.adminTab === it.id ? 'page' : null, onclick: function(){ state.adminTab = it.id; render(); } }, it.label);
     })),
     el('div', { 'class': 'hdr-side' }, [
-      (pushSupported() && !pushEnabled()) ? el('button', { 'class': 'iconbtn', title: 'Turn on notifications', style: 'color:var(--acc)', onclick: enablePush }, svgIcon(IC.bell)) : null,
+      (pushSupported() && !pushEnabled()) ? el('button', { 'class': 'iconbtn', 'aria-label': 'Turn on notifications', title: 'Turn on notifications', style: 'color:var(--acc)', onclick: enablePush }, svgIcon(IC.bell)) : null,
       workerPreviewSelect(),
-      el('button', { 'class': 'iconbtn', title: 'Sign out', onclick: function(){ confirmDlg('Sign out?', 'You can sign back in any time.', 'Sign out', signOut); } }, svgIcon(IC.out))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Sign out', title: 'Sign out', onclick: function(){ confirmDlg('Sign out?', 'You can sign back in any time.', 'Sign out', signOut); } }, svgIcon(IC.out))
     ])
   ]));
   app.appendChild(hdr);
-  var main = el('div', { 'class': 'wrap main' });
+  var main = el('main', { 'class': 'wrap main' });
   if (state.adminTab === 'roster') viewRoster(main);
   else if (state.adminTab === 'inbox') viewInbox(main);
   else if (state.adminTab === 'avail') viewAdminAvail(main);
@@ -287,7 +287,7 @@ function renderAdmin(app){
 }
 
 function workerPreviewSelect(){
-  var sel = el('select', { 'class': 'sel', style: 'min-height:38px;padding:6px 32px 6px 12px;font-size:13px;width:auto;border-radius:10px',
+  var sel = el('select', { 'class': 'sel', 'aria-label': 'Preview the app as a worker', style: 'min-height:40px;padding:6px 32px 6px 12px;font-size:14px;width:auto;border-radius:8px',
     onchange: function(){
       if (sel.value) { state.preview = sel.value; state.view = 'home'; }
       else state.preview = null;

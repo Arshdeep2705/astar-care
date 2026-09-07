@@ -92,7 +92,7 @@ function calMonth(main, w, shifts, r){
 
 function calEvent(s, w){
   var c = clientById(s.client_id);
-  var noted = notesForShift(s.id).length > 0;
+  var noted = shiftNotesForShift(s.id).length > 0;
   var typeTag = s.type === 'sleepover' ? 'Sleepover' : (tMin(s.start_t) >= 18 * 60 || tMin(s.end_t) <= tMin(s.start_t) ? 'Night' : 'Day');
   return el('div', { 'class': 'cal-ev', style: '--c:' + (c ? c.colour : 'var(--acc)'), onclick: function(){ openShiftSheet(s, w); } }, [
     el('div', { 'class': 'ev-time' }, [
@@ -101,7 +101,7 @@ function calEvent(s, w){
     ]),
     el('div', { 'class': 'ev-name', style: 'display:flex;align-items:center;gap:4px' }, [
       c ? c.name : '?',
-      noted ? el('span', { 'class': 'ev-tick', style: 'display:flex' }, svgIcon(IC.check, '0 0 24 24')) : null
+      noted ? el('span', { 'class': 'ev-tick', style: 'display:flex', title: 'Shift note saved', 'aria-label': 'Shift note saved' }, svgIcon(IC.check, '0 0 24 24')) : null
     ])
   ]);
 }

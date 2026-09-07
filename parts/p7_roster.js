@@ -112,8 +112,8 @@ function viewRoster(main){
       return el('button', { 'class': state.roster.range === p[0] ? 'on' : '', onclick: function(){ state.roster.range = p[0]; render(); } }, p[1]);
     })),
     el('div', { style: 'display:flex;align-items:center;gap:2px' }, [
-      el('button', { 'class': 'iconbtn', onclick: function(){ state.roster.anchor = addDays(state.roster.anchor, state.roster.range === 'week' ? -7 : (state.roster.range === 'fortnight' ? -14 : -28)); render(); ensureWindow(state.roster.anchor); } }, svgIcon(IC.left)),
-      el('button', { 'class': 'iconbtn', onclick: function(){ state.roster.anchor = addDays(state.roster.anchor, state.roster.range === 'week' ? 7 : (state.roster.range === 'fortnight' ? 14 : 28)); render(); ensureWindow(addDays(state.roster.anchor, 27)); } }, svgIcon(IC.right))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Previous period', onclick: function(){ state.roster.anchor = addDays(state.roster.anchor, state.roster.range === 'week' ? -7 : (state.roster.range === 'fortnight' ? -14 : -28)); render(); ensureWindow(state.roster.anchor); } }, svgIcon(IC.left)),
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Next period', onclick: function(){ state.roster.anchor = addDays(state.roster.anchor, state.roster.range === 'week' ? 7 : (state.roster.range === 'fortnight' ? 14 : 28)); render(); ensureWindow(addDays(state.roster.anchor, 27)); } }, svgIcon(IC.right))
     ]),
     el('div', { 'class': 't-sub', style: 'flex:1;min-width:120px' }, fmtDate(days[0]) + ' – ' + fmtDate(days[days.length - 1])),
     !isCurrent ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ state.roster.anchor = mondayOf(t); render(); } }, 'Today') : null,
@@ -131,6 +131,7 @@ function viewRoster(main){
     if (mobile) main.appendChild(rosterMobileWeek(wkDays, rows, t));
     else main.appendChild(rosterWeekGrid(wkDays, groups, t));
   }
+  main.appendChild(rosterLegend());
 }
 
 /* one tap fills the visible week with last week's shifts (same workers),
@@ -171,6 +172,25 @@ function gapCreateShift(row, d, btn){
     .then(function(rows){ state.data.shifts.push(rows[0]); openAssign(rows[0]); })
     ["catch"](function(e){ if (btn) btn.disabled = false; toast(e.message, true); });
 }
+/* what kind of overlap is this? handover (end == start) is normal; parts of a split slot are
+   normal; a deliberate 2:1 is flagged by the admin; anything else is a clash for that worker */
+function shiftOverlapKind(s){
+  if (!s || !s.worker_id) return null;
+  if (s.two_to_one) return 'two';
+  var clash = state.data.shifts.some(function(o){
+    return o.id !== s.id && o.worker_id === s.worker_id && Math.abs(pd(o.date) - pd(s.date)) <= 86400000 * 1.5 && overlaps(o, s);
+  });
+  return clash ? 'clash' : null;
+}
+function rosterLegend(){
+  return el('div', { 'class': 'legend', 'aria-label': 'Roster key' }, [
+    el('span', null, [ el('i', { style: 'background:var(--acc-soft);border:1px solid #BBD9DB' }), 'Covered' ]),
+    el('span', null, [ el('i', { style: 'background:var(--bad-soft);border:1px dashed #E3B1AB' }), 'Needs cover' ]),
+    el('span', null, [ el('i', { style: 'background:var(--night-soft);border:1px solid #C9CEE8' }), '2:1 — second worker rostered on purpose' ]),
+    el('span', null, [ el('i', { style: 'background:var(--warn-soft);border:1px solid #E7D6AE' }), 'Clash — this worker is double-booked' ]),
+    el('span', null, '☾ sleepover · "part" = a split slot')
+  ]);
+}
 function rosterChip(s, row, d){
   var pre = (s ? s.type : row.req.type) === 'sleepover' ? '☾ ' : '';
   if (!s) {
@@ -180,8 +200,12 @@ function rosterChip(s, row, d){
   }
   var w = s.worker_id ? workerById(s.worker_id) : null;
   if (w) {
-    return el('button', { 'class': 'rw-chip cov', onclick: function(){ openAdminShift(s); } }, [
-      w.name, el('span', { 'class': 'rc-t' }, pre + fmtTime(s.start_t) + '–' + fmtTime(s.end_t))
+    var kind = shiftOverlapKind(s);
+    var parts = s.req_id ? shiftsFor(s.req_id, s.date) : [];
+    var partLbl = parts.length > 1 ? ' · part ' + (parts.indexOf(s) + 1) + ' of ' + parts.length : '';
+    var title = kind === 'two' ? '2:1 — a second worker is rostered on purpose' : (kind === 'clash' ? 'Clash — ' + w.name + ' has another shift overlapping this time' : '');
+    return el('button', { 'class': 'rw-chip ' + (kind === 'two' ? 'two' : (kind === 'clash' ? 'clash' : 'cov')), title: title, 'aria-label': w.name + ' ' + fmtRange(s.start_t, s.end_t) + (title ? '. ' + title : ''), onclick: function(){ openAdminShift(s); } }, [
+      w.name + (kind === 'two' ? ' · 2:1' : (kind === 'clash' ? ' · clash' : '')), el('span', { 'class': 'rc-t' }, pre + fmtTime(s.start_t) + '–' + fmtTime(s.end_t) + partLbl)
     ]);
   }
   return el('button', { 'class': 'rw-chip gap', onclick: function(){ openAssign(s); } }, [
@@ -243,7 +267,8 @@ function rosterMobileWeek(wkDays, rows, t){
       el('div', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:6px' }, items.map(function(it){
         var w = it.s && it.s.worker_id ? workerById(it.s.worker_id) : null;
         var st = it.s || it.row.req;
-        return el('button', { 'class': 'rw-chip ' + (w ? 'cov' : 'gap'), style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px',
+        var kind = w ? shiftOverlapKind(it.s) : null;
+        return el('button', { 'class': 'rw-chip ' + (w ? (kind === 'two' ? 'two' : (kind === 'clash' ? 'clash' : 'cov')) : 'gap'), style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px',
           onclick: function(){
             if (w) openAdminShift(it.s);
             else if (it.s) openAssign(it.s);
@@ -251,7 +276,7 @@ function rosterMobileWeek(wkDays, rows, t){
           } }, [
           el('span', null, [
             el('b', { style: 'color:' + it.row.client.colour }, it.row.client.name),
-            ' · ' + (w ? w.name : 'Needs cover')
+            ' · ' + (w ? w.name + (kind === 'two' ? ' · 2:1' : (kind === 'clash' ? ' · clash' : '')) : 'Needs cover')
           ]),
           el('span', { 'class': 'rc-t', style: 'display:inline' }, (st.type === 'sleepover' ? '☾ ' : '') + fmtTime(st.start_t) + '–' + fmtTime(st.end_t))
         ]);
@@ -295,7 +320,7 @@ function openAssign(s){
         el('div', { 'class': 't-title' }, 'Who covers ' + (c ? c.name : '?') + '?'),
         el('div', { 'class': 't-cap t-num' }, fmtDateFull(s.date) + ' · ' + fmtRange(s.start_t, s.end_t))
       ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('div', { 'class': 't-cap', style: 'margin-bottom:10px' }, 'Ranked by submitted availability for that day.'),
@@ -449,7 +474,7 @@ function openAdminShift(s){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, (c ? c.name : 'Shift') + ' — ' + fmtDate(s.date)),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     body,
     el('div', { 'class': 'modal-foot', style: 'flex-wrap:wrap' }, [
@@ -486,7 +511,7 @@ function openEditRoster(s){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, 'Edit shift'),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('p', { 'class': 't-mut', style: 'font-size:14px;margin-bottom:14px' }, (c ? c.name : '') + ' · ' + fmtDate(s.date) + ' · ' + fmtRange(s.start_t, s.end_t)),
@@ -499,23 +524,46 @@ function openEditRoster(s){
         el('div', { 'class': 'field' }, [ el('label', null, 'Start'), el('input', { 'class': 'inp', type: 'time', id: 'es-start', value: s.start_t }) ]),
         el('div', { 'class': 'field' }, [ el('label', null, 'End'), el('input', { 'class': 'inp', type: 'time', id: 'es-end', value: s.end_t }) ])
       ]),
+      el('p', { 'class': 'hint', style: 'margin:-8px 0 12px' }, 'Handover rule: the shift before this one finishes when this one starts, and the shift after starts when this one finishes. Changing a time moves the neighbouring shift on this participant to match.'),
       el('button', { 'class': 'btn btn-pri btn-block', style: 'margin-bottom:16px', onclick: function(e){
         var nd = document.getElementById('es-date').value;
         var ns = document.getElementById('es-start').value;
         var ne = document.getElementById('es-end').value;
         if (!nd || !ns || !ne) { toast('Fill in the date and both times.', true); return; }
         busyBtn(e.currentTarget, true);
-        /* handover rule: the worker before finishes when this one starts, the worker after
-           starts when this one finishes — so a changed time moves the neighbour too */
         var nb = nd === s.date ? rosterNeighbours(s) : { prev: null, next: null };
         var linked = [];
         if (nb.prev && ns !== s.start_t) linked.push({ sh: nb.prev, patch: { end_t: ns }, msg: (workerById(nb.prev.worker_id) || { name: 'the previous shift' }).name + ' now finishes ' + fmtTime(ns) });
         if (nb.next && ne !== s.end_t) linked.push({ sh: nb.next, patch: { start_t: ne }, msg: (workerById(nb.next.worker_id) || { name: 'the next shift' }).name + ' now starts ' + fmtTime(ne) });
-        sbUpd('ac_shifts', 'id=eq.' + s.id, { date: nd, start_t: ns, end_t: ne })
-          .then(function(){ return Promise.all(linked.map(function(l){ return sbUpd('ac_shifts', 'id=eq.' + l.sh.id, l.patch); })); })
-          .then(function(){ closeModal(); toast('Shift updated to ' + fmtDate(nd) + ' · ' + fmtRange(ns, ne) + (linked.length ? ' · ' + linked.map(function(l){ return l.msg; }).join(', ') : '')); refresh(); })
-          ["catch"](function(err){ busyBtn(e.target, false); toast(err.message, true); });
+        function done(){ closeModal(); toast('Shift updated to ' + fmtDate(nd) + ' · ' + fmtRange(ns, ne) + (linked.length ? ' · ' + linked.map(function(l){ return l.msg; }).join(', ') : '')); refresh(); }
+        /* one transaction in the database when the RPC exists; otherwise step by step, reporting exactly what saved */
+        sbRpc('ac_set_shift_times', { p_shift: s.id, p_date: nd, p_start: ns, p_end: ne })
+          .then(done)
+          ["catch"](function(err){
+            if (!/PGRST202|Could not find the function|404/.test(err.message || '')) { busyBtn(e.target, false); toast(err.message, true); return; }
+            var saved = [];
+            sbUpd('ac_shifts', 'id=eq.' + s.id, { date: nd, start_t: ns, end_t: ne })
+              .then(function(){ saved.push('this shift'); var chain = Promise.resolve();
+                linked.forEach(function(l){ chain = chain.then(function(){ return sbUpd('ac_shifts', 'id=eq.' + l.sh.id, l.patch).then(function(){ saved.push(l.msg); }); }); });
+                return chain; })
+              .then(done)
+              ["catch"](function(err2){
+                busyBtn(e.target, false);
+                var missing = linked.filter(function(l){ return saved.indexOf(l.msg) < 0; }).map(function(l){ return fmtDate(l.sh.date) + ' ' + fmtRange(l.sh.start_t, l.sh.end_t); });
+                toast('PARTLY saved: ' + (saved.length ? saved.join(', ') : 'nothing') + '. NOT saved: ' + (saved.indexOf('this shift') < 0 ? 'this shift' : missing.join(', ')) + '. Fix the remaining shift by hand. (' + err2.message + ')', true);
+                refresh();
+              });
+          });
       } }, 'Save date & times'),
+      ('two_to_one' in s) ? el('label', { 'class': 'checkrow', style: 'margin:-6px 0 14px' }, [
+        el('input', { type: 'checkbox', checked: !!s.two_to_one, onchange: function(ev){
+          var on = ev.target.checked;
+          sbUpd('ac_shifts', 'id=eq.' + s.id, { two_to_one: on })
+            .then(function(){ s.two_to_one = on; toast(on ? 'Marked as 2:1 — a second worker is rostered on purpose' : '2:1 mark removed'); refresh(); })
+            ["catch"](function(err){ ev.target.checked = !on; toast(err.message, true); });
+        } }),
+        el('div', null, [ el('b', { style: 'font-size:14px' }, '2:1 support — a second worker is rostered at the same time on purpose'), el('div', { 'class': 't-cap' }, 'Leave unticked for a handover or a split; the roster then shows an unexpected overlap as a clash.') ])
+      ]) : null,
       el('div', { 'class': 'hint', style: 'margin:-10px 0 16px' }, 'Handover rule: changing the start or end also moves the shift before or after it on this client, so the two always meet at the same time.'),
       el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Share with a second worker'),
       el('p', { 'class': 't-mut', style: 'font-size:13px;margin-bottom:10px' }, 'Splits this shift in two. The current worker keeps the first part and the second worker takes over from the time you pick. Each part gets its own clock in/out and note.'),
@@ -532,10 +580,21 @@ function openEditRoster(s){
         var origEnd = s.end_t, wid = splitSel.value || null, btn = e.currentTarget;
         function doSplit(){
           busyBtn(btn, true);
-          sbUpd('ac_shifts', 'id=eq.' + s.id, { end_t: split })
-            .then(function(){ return sbIns('ac_shifts', [{ client_id: s.client_id, req_id: s.req_id, date: s.date, start_t: split, end_t: origEnd, type: s.type, worker_id: wid }]); })
-            .then(function(){ closeModal(); toast('Shift split at ' + fmtTime(split) + (wid ? '' : ' — second part needs cover')); refresh(); })
-            ["catch"](function(err){ busyBtn(btn, false); toast(err.message, true); });
+          function ok(){ closeModal(); toast('Shift split at ' + fmtTime(split) + (wid ? '' : ' — second part needs cover')); refresh(); }
+          sbRpc('ac_split_shift', { p_shift: s.id, p_split: split, p_worker: wid })
+            .then(ok)
+            ["catch"](function(err){
+              if (!/PGRST202|Could not find the function|404/.test(err.message || '')) { busyBtn(btn, false); toast(err.message, true); return; }
+              var firstDone = false;
+              sbUpd('ac_shifts', 'id=eq.' + s.id, { end_t: split })
+                .then(function(){ firstDone = true; return sbIns('ac_shifts', [{ client_id: s.client_id, req_id: s.req_id, date: s.date, start_t: split, end_t: origEnd, type: s.type, worker_id: wid }]); })
+                .then(ok)
+                ["catch"](function(err2){
+                  busyBtn(btn, false);
+                  toast(firstDone ? 'PARTLY saved: the first part now ends ' + fmtTime(split) + ' but the second part (' + fmtTime(split) + '–' + fmtTime(origEnd) + ') was NOT created — add it from the roster or set the end time back. (' + err2.message + ')' : 'Nothing was changed: ' + err2.message, true);
+                  refresh();
+                });
+            });
         }
         var w2 = wid ? workerById(wid) : null;
         if (w2 && doubleBooked(w2, { id: null, date: s.date, start_t: split, end_t: origEnd }))
@@ -572,7 +631,7 @@ function openClockEdit(s, rec, kind){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, (rec ? 'Fix clock ' : 'Add clock ') + kind),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('div', { 'class': 'field' }, [
@@ -626,7 +685,7 @@ function openReminder(s, w){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, 'Remind ' + w.name),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('div', { 'class': 'field' }, [ el('label', null, 'Message'), ta,
@@ -749,7 +808,7 @@ function openSendRoster(mode){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, 'Send roster'),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     body
   ]);

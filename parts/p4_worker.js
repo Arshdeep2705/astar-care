@@ -5,18 +5,89 @@ function myShifts(w){
 function missingNoteShifts(w){
   var t = todayYmd();
   return myShifts(w).filter(function(s){
-    return s.date >= addDays(t, -14) && shiftEnded(s) && notesForShift(s.id).length === 0;
+    return s.date >= addDays(t, -14) && shiftEnded(s) && !s.note_waived && shiftNotesForShift(s.id).length === 0;
   }).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
+}
+/* the shift the worker is on right now, else the next one */
+function currentOrNextShift(w){
+  var now = new Date();
+  var mine = myShifts(w);
+  var cur = mine.filter(function(s){ return shiftStartDate(s) <= now && shiftEndDate(s) >= now; })
+    .sort(function(a, b){ return shiftStartDate(a) - shiftStartDate(b); })[0];
+  if (cur) return { s: cur, kind: 'now' };
+  var next = mine.filter(function(s){ return shiftStartDate(s) > now; })
+    .sort(function(a, b){ return shiftStartDate(a) - shiftStartDate(b); })[0];
+  return next ? { s: next, kind: 'next' } : null;
+}
+function shiftSpanLabel(s){
+  var cross = tMin(s.end_t) <= tMin(s.start_t);
+  return fmtDate(s.date) + ' ' + fmtTime(s.start_t) + ' – ' + (cross ? fmtDate(addDays(s.date, 1)) + ' ' : '') + fmtTime(s.end_t);
+}
+function statusChip(label, state){ /* state: done | missing | na | pending */
+  var cls = state === 'done' ? 'done' : (state === 'missing' ? 'missing' : 'na');
+  var mark = state === 'done' ? '✓ ' : (state === 'missing' ? '! ' : '');
+  return el('span', { 'class': 'status ' + cls }, mark + label);
+}
+function recordStatusRow(s){
+  var ended = shiftEnded(s);
+  var note = shiftNotesForShift(s.id).length > 0;
+  var care = !!careLogForShift(s.id);
+  var on = s.type === 'sleepover' ? !!overnightLogForShift(s.id) : null;
+  var inc = incidentsForShift(s.id).length;
+  var nm = nearMissesForShift(s.id).length;
+  var row = el('div', { 'class': 'nc-status' }, [
+    statusChip(note ? 'Shift note saved' : (ended ? 'Shift note missing' : 'Shift note not yet due'), note ? 'done' : (ended ? 'missing' : 'na')),
+    statusChip(care ? 'Care log saved' : (ended ? 'Care log missing' : 'Care log'), care ? 'done' : (ended ? 'missing' : 'na')),
+    on === null ? null : statusChip(on ? 'Overnight summary saved' : (ended ? 'Overnight summary missing' : 'Overnight summary'), on ? 'done' : (ended ? 'missing' : 'na')),
+    inc ? statusChip(inc + ' incident report' + (inc === 1 ? '' : 's'), 'done') : null,
+    nm ? statusChip(nm + ' near miss' + (nm === 1 ? '' : 'es'), 'done') : null
+  ]);
+  return row;
+}
+function nowCard(s, w, kind){
+  var c = clientById(s.client_id);
+  var clocks = clocksForShift(s.id);
+  var cin = clocks.filter(function(x){ return x.kind === 'in'; }).slice(-1)[0];
+  var cout = clocks.filter(function(x){ return x.kind === 'out'; }).slice(-1)[0];
+  var card = el('section', { 'class': 'nowcard', style: '--c:' + (c ? c.colour : 'var(--acc)'), 'aria-label': kind === 'now' ? 'Current shift' : 'Next shift' });
+  card.appendChild(el('div', { 'class': 'nc-k' }, kind === 'now' ? 'On shift now' : 'Your next shift'));
+  card.appendChild(el('div', { 'class': 'nc-t' }, shiftSpanLabel(s)));
+  card.appendChild(el('div', { 'class': 'nc-who' }, (c ? c.name : 'Participant not set') + ' · ' + (s.type === 'sleepover' ? 'Sleepover' : 'Day shift')));
+  if (c && c.address) card.appendChild(el('div', { 'class': 'nc-meta' }, [ svgIcon(IC.pin), c.address ]));
+  if (shiftIsToday(s) || kind === 'now') {
+    var clockRow = el('div', { 'class': 'nc-meta', style: 'margin-top:8px' });
+    if (cin) clockRow.appendChild(el('span', { 'class': 'status done' }, 'Clocked in ' + fmtTime(pad2(new Date(cin.at).getHours()) + ':' + pad2(new Date(cin.at).getMinutes()))));
+    if (cout) clockRow.appendChild(el('span', { 'class': 'status na' }, 'Clocked out ' + fmtTime(pad2(new Date(cout.at).getHours()) + ':' + pad2(new Date(cout.at).getMinutes()))));
+    if (!cin) clockRow.appendChild(clockBtn(s, w, 'in'));
+    else if (!cout) clockRow.appendChild(clockBtn(s, w, 'out'));
+    card.appendChild(clockRow);
+  }
+  card.appendChild(recordStatusRow(s));
+  var careLog = careLogForShift(s.id), onLog = overnightLogForShift(s.id);
+  card.appendChild(el('div', { 'class': 'nc-actions' }, [
+    el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(){ openNoteModal({ shift: s, worker: w }); } }, [svgIcon(IC.plus), shiftNotesForShift(s.id).length ? 'Add another note' : 'Write the shift note']),
+    el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openCareLogModal({ shift: s, worker: w }); } }, careLog ? 'Edit care log' : 'Care log'),
+    s.type === 'sleepover' ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openOvernightModal({ shift: s, worker: w }); } }, onLog ? 'Edit overnight summary' : 'Overnight summary') : null,
+    el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openIncidentModal({ shift: s, worker: w }); } }, 'Incident report'),
+    el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openNearMissModal({ shift: s, worker: w }); } }, 'Near miss')
+  ]));
+  return card;
 }
 
 function viewWorkerHome(main, w){
   var t = todayYmd();
-  main.appendChild(el('div', { style: 'margin:6px 0 22px' }, [
-    el('div', { 'class': 't-display' }, "G'day, " + firstName(w.name)),
+  main.appendChild(el('div', { style: 'margin:6px 0 16px' }, [
+    el('h1', { 'class': 't-display' }, "G'day, " + firstName(w.name)),
     el('div', { 'class': 't-mut', style: 'margin-top:4px;font-size:15px' }, fmtDateFull(t))
   ]));
 
-  /* quick actions */
+  /* what matters first: the shift you are on, or the next one */
+  var focus = currentOrNextShift(w);
+  if (focus) main.appendChild(nowCard(focus.s, w, focus.kind));
+  else main.appendChild(el('div', { 'class': 'card empty' }, [ el('b', null, 'No upcoming shifts yet'), 'When you’re rostered on, your next shift appears here.' ]));
+
+  /* quick actions for a different shift */
+  main.appendChild(el('div', { 'class': 't-label', style: 'margin:18px 0 8px' }, 'For another shift'));
   main.appendChild(el('div', { 'class': 'quickgrid' }, [
     el('button', { 'class': 'quickbtn', onclick: function(){ pickShiftThen(w, 'note'); } }, [
       el('span', { 'class': 'qb-ic', style: 'background:var(--acc-soft);color:var(--acc)' }, svgIcon(IC.note)),
@@ -90,27 +161,21 @@ function viewWorkerHome(main, w){
     main.appendChild(mb);
   }
 
-  /* today's shifts */
-  var todays = myShifts(w).filter(shiftIsToday).sort(function(a,b){ return tMin(a.start_t) - tMin(b.start_t); });
-  var secT = el('div', { 'class': 'section' });
-  secT.appendChild(el('div', { 'class': 'section-head' }, el('div', { 'class': 't-title' }, 'Today')));
-  if (!todays.length) {
-    secT.appendChild(el('div', { 'class': 'card empty' }, [
-      el('div', { 'class': 'e-art' }, '☕'),
-      el('b', null, 'Nothing on today'),
-      'Enjoy the day off.'
-    ]));
-  } else {
+  /* other shifts today (the focus shift is already shown above) */
+  var todays = myShifts(w).filter(function(s){ return shiftIsToday(s) && !(focus && focus.s.id === s.id); }).sort(function(a,b){ return tMin(a.start_t) - tMin(b.start_t); });
+  if (todays.length) {
+    var secT = el('div', { 'class': 'section' });
+    secT.appendChild(el('div', { 'class': 'section-head' }, el('h2', { 'class': 't-title' }, 'Also today')));
     todays.forEach(function(s){ secT.appendChild(shiftCard(s, w, { clock: true })); });
+    main.appendChild(secT);
   }
-  main.appendChild(secT);
 
   /* coming up */
-  var upcoming = myShifts(w).filter(function(s){ return s.date > t; }).sort(function(a,b){
+  var upcoming = myShifts(w).filter(function(s){ return s.date > t && !(focus && focus.s.id === s.id); }).sort(function(a,b){
     return a.date === b.date ? tMin(a.start_t) - tMin(b.start_t) : (a.date < b.date ? -1 : 1);
   }).slice(0, 5);
   var secU = el('div', { 'class': 'section' });
-  secU.appendChild(el('div', { 'class': 'section-head' }, el('div', { 'class': 't-title' }, 'Coming up')));
+  secU.appendChild(el('div', { 'class': 'section-head' }, el('h2', { 'class': 't-title' }, 'Coming up')));
   if (!upcoming.length) {
     secU.appendChild(el('div', { 'class': 'card empty' }, [
       el('div', { 'class': 'e-art' }, '—'),
@@ -152,11 +217,11 @@ function pickShiftThen(w, what){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, what === 'note' ? 'Which shift is the note for?' : 'Which shift was the incident on?'),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, mine.slice(0, 21).map(function(s){
       var c = clientById(s.client_id);
-      var has = notesForShift(s.id).length;
+      var has = shiftNotesForShift(s.id).length;
       return el('button', { 'class': 'listnote', style: 'display:flex;align-items:center;gap:10px;width:100%;margin-bottom:8px;text-align:left', onclick: function(){
         closeModal();
         if (what === 'note') openNoteModal({ shift: s, worker: w });
@@ -209,6 +274,7 @@ function shiftCard(s, w, opts){
     card.appendChild(clockRow);
   }
 
+  card.appendChild(recordStatusRow(s));
   /* actions */
   var nearMisses = nearMissesForShift(s.id);
   var careLog = careLogForShift(s.id);
@@ -294,7 +360,7 @@ function clockBtn(s, w, kind){
           notifyAdmins(w.name + ' clocked ' + kind + ' — ' + (c ? c.name : ''),
             fmtTime(pad2(nw.getHours()) + ':' + pad2(nw.getMinutes())) + (d == null ? '' : ' · ' + Math.round(d) + ' m from site'));
           closeModal(); refresh();
-          if (kind === 'out' && notesForShift(s.id).length === 0) {
+          if (kind === 'out' && shiftNotesForShift(s.id).length === 0) {
             // the best moment to catch the note: right at clock-out
             toast('Clocked out — write up the shift before you head off');
             openNoteModal({ shift: s, worker: w });
@@ -321,7 +387,7 @@ function openShiftSheet(s, w){
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
       el('div', { 'class': 't-title' }, fmtDate(s.date)),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, shiftCard(s, w, { clock: true, showDate: false }))
   ]);
@@ -331,7 +397,7 @@ function openShiftSheet(s, w){
 /* ================= my notes ================= */
 function viewMyNotes(main, w){
   main.appendChild(el('div', { 'class': 'section-head', style: 'margin:6px 0 16px' }, [
-    el('div', { 'class': 't-display' }, 'My notes')
+    el('h1', { 'class': 't-display' }, 'My notes')
   ]));
   var mine = state.data.notes.filter(function(n){ return n.worker_id === w.id; });
   var myIncidents = state.data.incidents.filter(function(n){ return n.worker_id === w.id; });

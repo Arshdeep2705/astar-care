@@ -99,7 +99,7 @@ function openNoteRead(opts){
           shift ? ' · ' + fmtDate(shift.date) : ' · ' + fmtDT(note.created_at)
         ].join(''))
       ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     body,
     el('div', { 'class': 'modal-foot' }, [
@@ -127,13 +127,17 @@ function openNoteModal(opts){
   var removedPaths = [];
   var typed = false;
 
-  var typeSel = el('select', { 'class': 'sel' });
+  var typeSel = el('select', { 'class': 'sel', id: 'note-type' });
   NOTE_TYPES.forEach(function(nt){
     typeSel.appendChild(el('option', { value: nt, selected: (note ? note.note_type : 'Progress Notes') === nt }, nt));
   });
-  var ta = el('textarea', { 'class': 'ta', rows: '18', placeholder: 'Type to answer...' });
+  var ta = el('textarea', { 'class': 'ta ta-note', rows: '18', placeholder: 'Type to answer...', id: 'note-body', 'aria-describedby': 'note-body-help' });
   ta.value = note ? note.body.replace(/\*\*/g, '') : (typeSel.value === 'Progress Notes' ? NOTE_TEMPLATE : '');
   ta.addEventListener('input', function(){ typed = true; });
+  /* presentation only: the box grows with the note so the page scrolls, not a box inside a box */
+  function fitNote(){ ta.style.height = 'auto'; ta.style.height = Math.max(320, ta.scrollHeight + 4) + 'px'; }
+  ta.addEventListener('input', fitNote);
+  setTimeout(fitNote, 0);
   typeSel.addEventListener('change', function(){
     // only swap template if the worker hasn't typed anything yet
     var untouched = !typed && !editing;
@@ -146,8 +150,8 @@ function openNoteModal(opts){
   var errBox = el('div', { 'class': 'err-line', style: 'display:none' });
 
   var body = el('div', { 'class': 'modal-body' }, [
-    el('div', { 'class': 'field' }, [ el('label', null, 'Note type'), typeSel ]),
-    el('div', { 'class': 'field' }, [ el('label', null, 'Note body'), ta ]),
+    el('div', { 'class': 'field' }, [ el('label', { 'for': 'note-type' }, 'Note type'), typeSel ]),
+    el('div', { 'class': 'field' }, [ el('label', { 'for': 'note-body' }, 'Note body'), el('div', { 'class': 'hint', id: 'note-body-help', style: 'margin-bottom:6px' }, 'Answer under each heading. The headings are the template — leave them in place.'), ta ]),
     el('div', { 'class': 'field' }, [
       el('label', null, 'Client'),
       el('div', { 'class': 'inp', style: 'display:flex;align-items:center;gap:8px;background:var(--paper);cursor:default' }, [
@@ -221,7 +225,7 @@ function openNoteModal(opts){
         el('div', { 'class': 't-title' }, editing ? 'Edit shift note' : 'Add shift note'),
         worker ? el('div', { 'class': 't-cap' }, 'by ' + worker.name) : null
       ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     body, foot
   ]);
@@ -265,11 +269,11 @@ function openIncidentModal(opts){
     injuries: ir ? ir.injuries : 'No',
     injury_who: ir ? ir.injury_who : '',
     injury_kind: ir ? ir.injury_kind : '',
-    is_fall: ir ? (ir.is_fall ? 'Yes' : 'No') : 'No',
+    is_fall: ir ? (ir.is_fall ? 'Yes' : 'No') : '',
     fall_location: ir ? (ir.fall_location || '') : '',
-    second_person_needed: ir ? (ir.second_person_needed ? 'Yes' : 'No') : 'No',
+    second_person_needed: ir ? (ir.second_person_needed ? 'Yes' : 'No') : '',
     minutes_on_floor: ir && ir.minutes_on_floor != null ? String(ir.minutes_on_floor) : '',
-    equipment_involved: ir ? (ir.equipment_involved ? 'Yes' : 'No') : 'No',
+    equipment_involved: ir ? (ir.equipment_involved ? 'Yes' : 'No') : '',
     equipment_desc: ir ? (ir.equipment_desc || '') : ''
   };
   var pendingPhotos = [];
@@ -321,10 +325,10 @@ function openIncidentModal(opts){
 
   /* fall details — feed the admin Reports tab (falls, 2:1 need, equipment) */
   function fallBlock(){
-    var det = el('div', { style: f.is_fall === 'No' ? 'display:none' : '' });
+    var det = el('div', { style: f.is_fall !== 'Yes' ? 'display:none' : '' });
     var locSel = el('select', { 'class': 'sel', onchange: function(e){ f.fall_location = e.target.value; } },
       [el('option', { value: '' }, 'Choose…')].concat(NM_LOCATIONS.map(function(l){ return el('option', { value: l, selected: f.fall_location === l }, l); })));
-    var eqDet = el('div', { style: f.equipment_involved === 'No' ? 'display:none' : '' },
+    var eqDet = el('div', { style: f.equipment_involved !== 'Yes' ? 'display:none' : '' },
       el('div', { 'class': 'field' }, [ el('label', null, 'Which equipment, and what happened to it'),
         el('input', { 'class': 'inp', value: f.equipment_desc, oninput: function(e){ f.equipment_desc = e.target.value; } }) ]));
     function yn(label, key, onchg){
@@ -339,11 +343,11 @@ function openIncidentModal(opts){
     det.appendChild(yn('Was a second person needed to get the participant up?', 'second_person_needed'));
     det.appendChild(el('div', { 'class': 'field' }, [ el('label', null, 'Minutes on the floor before being helped up'),
       el('input', { 'class': 'inp', type: 'number', min: '0', inputmode: 'numeric', value: f.minutes_on_floor, oninput: function(e){ f.minutes_on_floor = e.target.value; } }) ]));
-    det.appendChild(yn('Was equipment involved (wheelchair, shower chair, bed, hoist)?', 'equipment_involved', function(){ eqDet.style.display = f.equipment_involved === 'No' ? 'none' : ''; }));
+    det.appendChild(yn('Was equipment involved (wheelchair, shower chair, bed, hoist)?', 'equipment_involved', function(){ eqDet.style.display = f.equipment_involved !== 'Yes' ? 'none' : ''; }));
     det.appendChild(eqDet);
     return el('div', { 'class': 'card', style: 'padding:12px 16px;margin-bottom:14px;background:var(--paper);box-shadow:none;border:0' }, [
       el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Fall details'),
-      yn('Did this incident involve a fall?', 'is_fall', function(){ det.style.display = f.is_fall === 'No' ? 'none' : ''; }),
+      yn('Did this incident involve a fall?', 'is_fall', function(){ det.style.display = f.is_fall !== 'Yes' ? 'none' : ''; }),
       det
     ]);
   }
@@ -409,6 +413,10 @@ function openIncidentModal(opts){
   function save(){
     if (!f.ticket_desc.trim()) return fail('Q4 — a ticket description is required.');
     if (!f.incident_types.length) return fail('Q7 — tick at least one incident type.');
+    if (f.is_fall === '') return fail('Fall details — say whether this incident involved a fall (Yes or No).');
+    if (f.is_fall === 'Yes' && !f.fall_location) return fail('Fall details — choose where the fall happened.');
+    if (f.is_fall === 'Yes' && f.second_person_needed === '') return fail('Fall details — say whether a second person was needed to get the participant up.');
+    if (f.is_fall === 'Yes' && f.equipment_involved === '') return fail('Fall details — say whether equipment was involved.');
     if (f.restrictive !== 'No' && !f.restrictive_types.length) return fail('Q9 — tick the type(s) of restrictive practice.');
     if (f.property_damage !== 'No' && !f.property_info.trim()) return fail('Q14 — describe the property damage.');
     if (f.injuries !== 'No' && !f.injury_who.trim()) return fail('Q18 — say who was injured and how.');
@@ -468,7 +476,7 @@ function openIncidentModal(opts){
         el('div', { 'class': 't-title' }, editing ? 'Edit incident report' : 'Incident report'),
         client ? el('div', { 'class': 't-cap' }, client.name + (shift ? ' · ' + fmtDate(shift.date) : '')) : null
       ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     body,
     el('div', { 'class': 'modal-foot' }, [

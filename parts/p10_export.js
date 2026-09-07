@@ -19,7 +19,7 @@ function openExportOptions(){
         el('div', { 'class': 't-title' }, 'Export'),
         el('div', { 'class': 't-cap' }, (c ? c.name : '') + ' · ' + fmtDate(R.from) + ' to ' + fmtDate(R.to) + ' (change these on the Reports tab)')
       ]),
-      el('button', { 'class': 'iconbtn', onclick: closeModal }, svgIcon(IC.x))
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
       el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'What do you want to export?'),
