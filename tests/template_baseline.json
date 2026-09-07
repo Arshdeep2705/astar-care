@@ -1,0 +1,18 @@
+{
+  "sha256": "b9219053100d2dc516123629f82d298d6bb802ee1664a6c7fb5400a4ac5b781c",
+  "lines": 33,
+  "headings": [
+    "MEDICATION REFUSAL",
+    "SHIFT SUMMARY",
+    "APPOINTMENTS",
+    "COMMUNITY ACTIVITIES",
+    "CHALLENGING BEHAVIOURS",
+    "MEDICATION",
+    "FOOD INTAKE",
+    "PERSONAL CARE",
+    "FOR ACTIVE NIGHTS ONLY",
+    "WERE THERE ANY INCIDENTS",
+    "ADDITIONAL NOTES"
+  ],
+  "template": "SHIFT SUMMARY (Give a brief summary of things that happened during the shift)\n\n\nAPPOINTMENTS (List any appointments attended during the shift, times, who the appointment was with, what it was for, and the support you provided during the appointment)\n\n\nCOMMUNITY ACTIVITIES (List any community activities the participant attended during the shift including what the activity was, the location and the times, and the support you provided during the activity)\n\n\nCHALLENGING BEHAVIOURS (Please note any challenging behaviours the Participant displayed during the shift. Include triggers and the responses you provided)\n\n\nMEDICATION (Note all medications the Participant took during the shift. Include the times taken, if ingestion was witnessed)\n\n\nMEDICATION REFUSAL (Did the Participant refuse medication at all during this shift. If 'yes', please note what medication was refused and any details. If 'no' please just write no)\n\n\nFOOD INTAKE (List any food the Participant ate during the shift and approx. times)\n\n\nPERSONAL CARE (Note any personal care activities the Participant was supported with during the shift)\n\n\nFOR ACTIVE NIGHTS ONLY (What time did the participant go to sleep, details of any support needed during night and any other observations. If this shift was not active night write 'no')\n\n\nWERE THERE ANY INCIDENTS DURING THE SHIFT (Provide a brief summary and complete an incident report within 24 hours)\n\n\nADDITIONAL NOTES\n\n"
+}
