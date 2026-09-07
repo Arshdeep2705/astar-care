@@ -80,6 +80,7 @@ input,select,textarea{font:inherit;color:inherit}
 .hdr-tab.on{background:var(--acc);color:#fff;font-weight:600}
 .hdr-side{display:flex;align-items:center;gap:8px;margin-left:auto}
 @media(max-width:900px){ .hdr-tabs{display:none} }
+@media(max-width:640px){ .hdr-in{gap:8px;min-height:56px} .hdr-side{gap:4px;min-width:0} .hdr-side .sel{max-width:132px;padding-left:8px;font-size:14px!important} .brand{font-size:16px;gap:8px} .brand-mark{width:26px;height:26px;font-size:14px} }
 
 /* ---------- bottom nav (mobile) ---------- */
 /* solid background + own compositor layer: iOS detaches fixed elements that
@@ -299,6 +300,22 @@ input,select,textarea{font:inherit;color:inherit}
 .nowcard .nc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:10px}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px}
+
+/* ---------- summary tab ---------- */
+.sum-tabs{display:flex;flex-wrap:wrap;width:100%;max-width:100%}
+.rp-controls{max-width:100%}
+.sum-findings{margin:0;padding-left:20px;font-size:14.5px;line-height:1.55} .sum-findings li{margin-bottom:6px}
+.sum-six{padding:12px 0;border-top:1px solid var(--line)} .sum-six:first-child{border-top:0;padding-top:0}
+.sum-six-h{font-weight:700;font-size:14.5px;color:var(--ink);margin-bottom:2px}
+.sum-obs-list{display:flex;flex-direction:column;gap:10px}
+.sum-obs{border:1px solid var(--line);border-radius:var(--r-m);padding:12px 14px;background:var(--card)}
+.sum-obs.proposed{border-left:4px solid #C9A227} .sum-obs.accepted{border-left:4px solid var(--ok)} .sum-obs.rejected{border-left:4px solid var(--line-2);opacity:.85}
+.sum-obs-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.sum-quote{font-size:13.5px;color:var(--mut);background:var(--paper);border-left:3px solid var(--line-2);padding:6px 10px;margin-top:6px;border-radius:0 var(--r-s) var(--r-s) 0;overflow-wrap:anywhere}
+.sum-pre{white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.55;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-s);padding:12px 14px;max-height:60vh;overflow:auto}
+.sum-doc .rp-tbl th{background:var(--paper)}
+.rp-tbl thead{display:table-header-group}
+@page{ @bottom-right{ content:"Page " counter(page) " of " counter(pages); font-size:9pt; color:#666; font-family:"Segoe UI",Arial,sans-serif } }
 
 /* ---------- toast ---------- */
 .toasts{position:fixed;bottom:calc(20px + var(--sab));left:50%;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:min(92vw,420px)}

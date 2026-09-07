@@ -5,11 +5,11 @@ var XP_TYPES = [
   { id: 'near',      label: 'Near misses',            help: 'One near miss record per page.' },
   { id: 'care',      label: 'Personal care logs',     help: 'One shift\'s care log per page.' },
   { id: 'overnight', label: 'Overnight summaries',    help: 'One night per page (11pm–7am block figures).' },
-  { id: 'summary',   label: 'Summary report',         help: 'The charts and tables from the Reports tab — falls, near misses, overnight hours, 2:1 evidence.' }
+  { id: 'summary',   label: 'Summary report',         help: 'The reviewed evidence summary: coverage, overnight, daytime, incidents, gaps, methodology and source index.' }
 ];
 
 function openExportOptions(){
-  var R = state.rep || { client: null, from: addDays(todayYmd(), -27), to: todayYmd() };
+  var R = state.sum ? { client: state.sum.client, from: state.sum.from, to: state.sum.to } : (state.rep || { client: null, from: addDays(todayYmd(), -27), to: todayYmd() });
   var o = state.exp || { type: 'notes', names: true };
   var c = clientById(R.client);
   var m = el('div', { 'class': 'modal', style: 'max-width:480px' }, [
@@ -17,7 +17,7 @@ function openExportOptions(){
     el('div', { 'class': 'modal-head' }, [
       el('div', null, [
         el('div', { 'class': 't-title' }, 'Export'),
-        el('div', { 'class': 't-cap' }, (c ? c.name : '') + ' · ' + fmtDate(R.from) + ' to ' + fmtDate(R.to) + ' (change these on the Reports tab)')
+        el('div', { 'class': 't-cap' }, (c ? c.name : '') + ' · ' + fmtDate(R.from) + ' to ' + fmtDate(R.to) + ' (change these on the Summary tab)')
       ]),
       el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
@@ -41,7 +41,7 @@ function openExportOptions(){
       el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
       el('button', { 'class': 'btn btn-pri', onclick: function(){
         state.exp = o; closeModal();
-        if (o.type === 'summary') { state.adminTab = 'reports'; render(); setTimeout(function(){ window.print(); }, 150); return; }
+        if (o.type === 'summary') { state.adminTab = 'sumdoc'; render(); window.scrollTo(0, 0); return; }
         state.adminTab = 'export'; render(); window.scrollTo(0, 0);
       } }, 'Open')
     ])
@@ -50,7 +50,7 @@ function openExportOptions(){
 }
 
 function viewExport(main){
-  var R = state.rep || (state.rep = { client: null, from: addDays(todayYmd(), -27), to: todayYmd() });
+  var R = state.sum ? { client: state.sum.client, from: state.sum.from, to: state.sum.to } : (state.rep || (state.rep = { client: null, from: addDays(todayYmd(), -27), to: todayYmd() }));
   var o = state.exp || { type: 'notes', names: true };
   var client = clientById(R.client);
   var org = (state.data.settings && state.data.settings.org_name) || 'Astar Health Service';
@@ -60,7 +60,7 @@ function viewExport(main){
   function shiftLine(s){ return (s.type === 'sleepover' ? 'Sleepover shift ' : 'Day shift ') + fmtRange(s.start_t, s.end_t) + (s.worker_id ? ' · ' + wName(s.worker_id) : ''); }
 
   main.appendChild(el('div', { 'class': 'rp-controls', style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 16px' }, [
-    el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ state.adminTab = 'reports'; render(); } }, [svgIcon(IC.left), 'Back to reports']),
+    el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ state.adminTab = 'reports'; render(); } }, [svgIcon(IC.left), 'Back to summary']),
     el('button', { 'class': 'btn btn-sec btn-sm', onclick: openExportOptions }, 'Change export'),
     el('button', { 'class': 'btn btn-pri btn-sm', onclick: function(){ window.print(); } }, [svgIcon(IC.file), 'Print / save as PDF']),
     el('span', { 'class': 't-cap' }, 'One record per page. Everything shown is exactly what is stored in the app.')
