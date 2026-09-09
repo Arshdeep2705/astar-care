@@ -1,4 +1,4 @@
-# Astar Care — database migrations awaiting deployment approval
+# Astar Care — database migrations (001–005 all applied to production by 2026-09-09)
 
 Prepared 2026-09-07 on branch `codex/astar-ui-evidence`. **None of these has been applied to
 the production database.** Each was validated by running its full body plus the checks in
@@ -33,12 +33,13 @@ the new objects; the nullable-column change is left in place (harmless).
 * The Summary import/review workflow is unavailable (the tables do not exist); the tab shows
   the in-app records only and says so.
 
-## Added 2026-09-09 — awaiting approval
+## Added 2026-09-09 — 004 and 005 are APPLIED (2026-09-09)
 
 | File | What it does | Risk | Verified |
 |---|---|---|---|
-| `005_summary_analytics.sql` | `ac_evidence_observations.duplicate_of_record` (an observation can point at the incident/near-miss record it repeats, so one event is counted once); `ac_care_logs.shower_done` nullable (offered-but-unanswered is "outcome not recorded", not declined); `ac_split_shift` dates the second segment on the next day for after-midnight splits of overnight shifts and refuses a split time outside the shift **in the database**. Nothing historical is rewritten; `two_to_one`, `second_person_needed` and `single_worker_capacity` stay as columns for old rows but are no longer asked or reported. | Low. Additive; one function body replaced. | 4/4 checks pass in a rolled-back transaction (`tests/005_verify.sql`, 2026-09-09) |
+| `004_transfer_flag_and_other_options.sql` (APPLIED 2026-09-09) | `during_transfer` on near misses + incident forms; `*_other` free-text columns; `Other` added to every incident enum. | Low. Additive. | live |
+| `005_summary_analytics.sql` (APPLIED 2026-09-09, verified live after apply) | `ac_evidence_observations.duplicate_of_record` (an observation can point at the incident/near-miss record it repeats, so one event is counted once); `ac_care_logs.shower_done` nullable (offered-but-unanswered is "outcome not recorded", not declined); `ac_split_shift` dates the second segment on the next day for after-midnight splits of overnight shifts and refuses a split time outside the shift **in the database**. Nothing historical is rewritten; `two_to_one`, `second_person_needed` and `single_worker_capacity` stay as columns for old rows but are no longer asked or reported. | Low. Additive; one function body replaced. | 4/4 checks pass in a rolled-back transaction (`tests/005_verify.sql`, 2026-09-09) |
 
-Until 005 is applied the app: links a repeat to a structured record with the legacy self-link + note (readable by the metrics), still stores an unanswered shower outcome as declined (the form now requires an answer, so this only affects old rows), and computes the split segment date in the browser (`evSplitSegmentDate`) while the database function still uses the same date.
+(Historical — 005 is applied.) Until 005 was applied the app: links a repeat to a structured record with the legacy self-link + note (readable by the metrics), still stores an unanswered shower outcome as declined (the form now requires an answer, so this only affects old rows), and computes the split segment date in the browser (`evSplitSegmentDate`) while the database function still uses the same date.
 
 Third-party library: the document import now loads **pdf.js 4.9.124** (ES module, `pdf.min.mjs` + `pdf.worker.min.mjs` from cdnjs) with `isEvalSupported:false` and `disableFontFace:true`; 3.x was end-of-life and carried the CVE-2024-4367 arbitrary-JavaScript-in-PDF issue. Verified locally with a text PDF (extracted, 2 proposals) and an image-only PDF (marked for manual entry).
