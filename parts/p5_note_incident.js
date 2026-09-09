@@ -266,7 +266,7 @@ function openIncidentModal(opts){
     property_damage: ir ? ir.property_damage : 'No',
     property_info: ir ? ir.property_info : '',
     emergency: ir ? (ir.emergency || []).slice() : [],
-    injuries: ir ? ir.injuries : 'No',
+    injuries: ir ? (ir.injuries == null ? '' : ir.injuries) : '',
     injury_who: ir ? ir.injury_who : '',
     injury_kind: ir ? ir.injury_kind : '',
     incident_type_other: ir ? (ir.incident_type_other || '') : '',
@@ -360,7 +360,7 @@ function openIncidentModal(opts){
     det.appendChild(locOther);
     det.appendChild(yn('Did it happen during a transfer?', 'during_transfer'));
     det.appendChild(el('div', { 'class': 'q-help', style: 'margin:-6px 0 12px' }, 'A transfer is any move you assisted — bed, chair, toilet, shower, car, anywhere.'));
-    det.appendChild(yn('Was a second person needed to get the participant up?', 'second_person_needed'));
+    if (ir && ir.second_person_needed) det.appendChild(el('div', { 'class': 't-cap', style: 'margin:-4px 0 10px' }, 'Recorded on this report: a second person helped the participant up. (This question is no longer asked on new reports.)'));
     det.appendChild(el('div', { 'class': 'field' }, [ el('label', null, 'Minutes on the floor before being helped up'),
       el('input', { 'class': 'inp', type: 'number', min: '0', inputmode: 'numeric', value: f.minutes_on_floor, oninput: function(e){ f.minutes_on_floor = e.target.value; } }) ]));
     det.appendChild(yn('Was equipment involved (wheelchair, shower chair, bed, hoist)?', 'equipment_involved', function(){ eqDet.style.display = f.equipment_involved !== 'Yes' ? 'none' : ''; }));
@@ -389,7 +389,7 @@ function openIncidentModal(opts){
   var injuryKindSel = el('select', { 'class': 'sel', onchange: function(e){ f.injury_kind = e.target.value; injuryOther.style.display = f.injury_kind === 'Other' ? '' : 'none'; } });
   injuryKindSel.appendChild(el('option', { value: '' }, 'Choose…'));
   INJURY_KINDS.forEach(function(k){ injuryKindSel.appendChild(el('option', { value: k, selected: f.injury_kind === k }, k)); });
-  var secInjury = el('div', { style: f.injuries === 'No' ? 'display:none' : '' }, [
+  var secInjury = el('div', { style: f.injuries !== Q17_YES ? 'display:none' : '' }, [
     longQ(18, 'Who was injured and how did this injury happen?', 'injury_who'),
     el('div', { 'class': 'field' }, [ qLabel(19, 'What kind of injury:'), injuryKindSel, injuryOther ])
   ]);
@@ -422,7 +422,7 @@ function openIncidentModal(opts){
     secProperty,
     multiQ(16, 'Were emergency services called at all during this incident?', 'emergency', EMERGENCY, 'emergency_other'),
     choiceQ(17, 'Were there any injuries?', 'injuries', ['No', Q17_YES], function(){
-      secInjury.style.display = f.injuries === 'No' ? 'none' : '';
+      secInjury.style.display = f.injuries !== Q17_YES ? 'none' : '';
     }),
     secInjury,
     errBox
@@ -441,13 +441,13 @@ function openIncidentModal(opts){
     if (f.is_fall === 'Yes' && !f.fall_location) return fail('Fall details — choose where the fall happened.');
     if (f.is_fall === 'Yes' && f.fall_location === 'Other' && !f.fall_location_other.trim()) return fail('Fall details — say where it was.');
     if (f.is_fall === 'Yes' && f.during_transfer === '') return fail('Fall details — say whether it happened during a transfer.');
-    if (f.is_fall === 'Yes' && f.second_person_needed === '') return fail('Fall details — say whether a second person was needed to get the participant up.');
     if (f.is_fall === 'Yes' && f.equipment_involved === '') return fail('Fall details — say whether equipment was involved.');
     if (f.incident_types.indexOf('Other') >= 0 && !f.incident_type_other.trim()) return fail('Q7 — say what the other incident type was.');
     if (f.restrictive !== 'No' && !f.restrictive_types.length) return fail('Q9 — tick the type(s) of restrictive practice.');
     if (f.restrictive !== 'No' && f.restrictive_types.indexOf('Other') >= 0 && !f.restrictive_other.trim()) return fail('Q9 — say what the other restrictive practice was.');
     if (f.emergency.indexOf('Other') >= 0 && !f.emergency_other.trim()) return fail('Q16 — say which other service was called.');
     if (f.property_damage !== 'No' && !f.property_info.trim()) return fail('Q14 — describe the property damage.');
+    if (f.injuries === '') return fail('Q17 — say whether there were any injuries (Yes or No).');
     if (f.injuries !== 'No' && !f.injury_who.trim()) return fail('Q18 — say who was injured and how.');
     if (f.injuries !== 'No' && !f.injury_kind) return fail('Q19 — choose the kind of injury.');
     if (f.injuries !== 'No' && f.injury_kind === 'Other' && !f.injury_kind_other.trim()) return fail('Q19 — say what kind of injury it was.');
@@ -478,7 +478,7 @@ function openIncidentModal(opts){
         fall_location: f.is_fall === 'Yes' ? f.fall_location : '',
         fall_location_other: (f.is_fall === 'Yes' && f.fall_location === 'Other') ? f.fall_location_other : '',
         during_transfer: f.is_fall === 'Yes' ? (f.during_transfer === 'Yes') : null,
-        second_person_needed: f.is_fall === 'Yes' && f.second_person_needed === 'Yes',
+        second_person_needed: ir ? !!ir.second_person_needed : false,   // retired question: historical value kept, never set on new reports
         minutes_on_floor: f.is_fall === 'Yes' && f.minutes_on_floor !== '' ? parseInt(f.minutes_on_floor, 10) : null,
         equipment_involved: f.is_fall === 'Yes' && f.equipment_involved === 'Yes',
         equipment_desc: f.is_fall === 'Yes' && f.equipment_involved === 'Yes' ? f.equipment_desc : '',

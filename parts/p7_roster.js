@@ -172,11 +172,11 @@ function gapCreateShift(row, d, btn){
     .then(function(rows){ state.data.shifts.push(rows[0]); openAssign(rows[0]); })
     ["catch"](function(e){ if (btn) btn.disabled = false; toast(e.message, true); });
 }
-/* what kind of overlap is this? handover (end == start) is normal; parts of a split slot are
-   normal; a deliberate 2:1 is flagged by the admin; anything else is a clash for that worker */
+/* handover (end == start) and the parts of a split slot are normal; a worker overlapping their
+   own other shift is a clash. Overlapping chips on one participant are simply shown side by side;
+   the app makes no judgement about staffing. */
 function shiftOverlapKind(s){
   if (!s || !s.worker_id) return null;
-  if (s.two_to_one) return 'two';
   var clash = state.data.shifts.some(function(o){
     return o.id !== s.id && o.worker_id === s.worker_id && Math.abs(pd(o.date) - pd(s.date)) <= 86400000 * 1.5 && overlaps(o, s);
   });
@@ -186,7 +186,6 @@ function rosterLegend(){
   return el('div', { 'class': 'legend', 'aria-label': 'Roster key' }, [
     el('span', null, [ el('i', { style: 'background:var(--acc-soft);border:1px solid #BBD9DB' }), 'Covered' ]),
     el('span', null, [ el('i', { style: 'background:var(--bad-soft);border:1px dashed #E3B1AB' }), 'Needs cover' ]),
-    el('span', null, [ el('i', { style: 'background:var(--night-soft);border:1px solid #C9CEE8' }), '2:1 — second worker rostered on purpose' ]),
     el('span', null, [ el('i', { style: 'background:var(--warn-soft);border:1px solid #E7D6AE' }), 'Clash — this worker is double-booked' ]),
     el('span', null, '☾ sleepover · "part" = a split slot')
   ]);
@@ -203,9 +202,9 @@ function rosterChip(s, row, d){
     var kind = shiftOverlapKind(s);
     var parts = s.req_id ? shiftsFor(s.req_id, s.date) : [];
     var partLbl = parts.length > 1 ? ' · part ' + (parts.indexOf(s) + 1) + ' of ' + parts.length : '';
-    var title = kind === 'two' ? '2:1 — a second worker is rostered on purpose' : (kind === 'clash' ? 'Clash — ' + w.name + ' has another shift overlapping this time' : '');
-    return el('button', { 'class': 'rw-chip ' + (kind === 'two' ? 'two' : (kind === 'clash' ? 'clash' : 'cov')), title: title, 'aria-label': w.name + ' ' + fmtRange(s.start_t, s.end_t) + (title ? '. ' + title : ''), onclick: function(){ openAdminShift(s); } }, [
-      w.name + (kind === 'two' ? ' · 2:1' : (kind === 'clash' ? ' · clash' : '')), el('span', { 'class': 'rc-t' }, pre + fmtTime(s.start_t) + '–' + fmtTime(s.end_t) + partLbl)
+    var title = kind === 'clash' ? 'Clash — ' + w.name + ' has another shift overlapping this time' : '';
+    return el('button', { 'class': 'rw-chip ' + (kind === 'clash' ? 'clash' : 'cov'), title: title, 'aria-label': w.name + ' ' + fmtRange(s.start_t, s.end_t) + (title ? '. ' + title : ''), onclick: function(){ openAdminShift(s); } }, [
+      w.name + (kind === 'clash' ? ' · clash' : ''), el('span', { 'class': 'rc-t' }, pre + fmtTime(s.start_t) + '–' + fmtTime(s.end_t) + partLbl)
     ]);
   }
   return el('button', { 'class': 'rw-chip gap', onclick: function(){ openAssign(s); } }, [
@@ -268,7 +267,7 @@ function rosterMobileWeek(wkDays, rows, t){
         var w = it.s && it.s.worker_id ? workerById(it.s.worker_id) : null;
         var st = it.s || it.row.req;
         var kind = w ? shiftOverlapKind(it.s) : null;
-        return el('button', { 'class': 'rw-chip ' + (w ? (kind === 'two' ? 'two' : (kind === 'clash' ? 'clash' : 'cov')) : 'gap'), style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px',
+        return el('button', { 'class': 'rw-chip ' + (w ? (kind === 'clash' ? 'clash' : 'cov') : 'gap'), style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px',
           onclick: function(){
             if (w) openAdminShift(it.s);
             else if (it.s) openAssign(it.s);
@@ -276,7 +275,7 @@ function rosterMobileWeek(wkDays, rows, t){
           } }, [
           el('span', null, [
             el('b', { style: 'color:' + it.row.client.colour }, it.row.client.name),
-            ' · ' + (w ? w.name + (kind === 'two' ? ' · 2:1' : (kind === 'clash' ? ' · clash' : '')) : 'Needs cover')
+            ' · ' + (w ? w.name + (kind === 'clash' ? ' · clash' : '') : 'Needs cover')
           ]),
           el('span', { 'class': 'rc-t', style: 'display:inline' }, (st.type === 'sleepover' ? '☾ ' : '') + fmtTime(st.start_t) + '–' + fmtTime(st.end_t))
         ]);
@@ -555,28 +554,19 @@ function openEditRoster(s){
               });
           });
       } }, 'Save date & times'),
-      ('two_to_one' in s) ? el('label', { 'class': 'checkrow', style: 'margin:-6px 0 14px' }, [
-        el('input', { type: 'checkbox', checked: !!s.two_to_one, onchange: function(ev){
-          var on = ev.target.checked;
-          sbUpd('ac_shifts', 'id=eq.' + s.id, { two_to_one: on })
-            .then(function(){ s.two_to_one = on; toast(on ? 'Marked as 2:1 — a second worker is rostered on purpose' : '2:1 mark removed'); refresh(); })
-            ["catch"](function(err){ ev.target.checked = !on; toast(err.message, true); });
-        } }),
-        el('div', null, [ el('b', { style: 'font-size:14px' }, '2:1 support — a second worker is rostered at the same time on purpose'), el('div', { 'class': 't-cap' }, 'Leave unticked for a handover or a split; the roster then shows an unexpected overlap as a clash.') ])
-      ]) : null,
+      /* (the former 2:1 marker was retired on 2026-09-09; the column stays for historical rows) */
       el('div', { 'class': 'hint', style: 'margin:-10px 0 16px' }, 'Handover rule: changing the start or end also moves the shift before or after it on this client, so the two always meet at the same time.'),
-      el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Share with a second worker'),
-      el('p', { 'class': 't-mut', style: 'font-size:13px;margin-bottom:10px' }, 'Splits this shift in two. The current worker keeps the first part and the second worker takes over from the time you pick. Each part gets its own clock in/out and note.'),
+      el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Hand part of this shift to another worker'),
+      el('p', { 'class': 't-mut', style: 'font-size:13px;margin-bottom:10px' }, 'Splits this shift in two. The current worker keeps the first part and the other worker takes over from the time you pick. Each part gets its own clock in/out and note.'),
       el('div', { 'class': 'grid2' }, [
-        el('div', { 'class': 'field' }, [ el('label', null, 'Second worker starts'), el('input', { 'class': 'inp', type: 'time', id: 'es-split' }) ]),
-        el('div', { 'class': 'field' }, [ el('label', null, 'Second worker'), splitSel ])
+        el('div', { 'class': 'field' }, [ el('label', null, 'Handover time'), el('input', { 'class': 'inp', type: 'time', id: 'es-split' }) ]),
+        el('div', { 'class': 'field' }, [ el('label', null, 'Other worker'), splitSel ])
       ]),
       el('button', { 'class': 'btn btn-sec btn-block', style: 'margin-bottom:16px', onclick: function(e){
         var split = document.getElementById('es-split').value;
-        if (!split) { toast('Pick the time the second worker starts.', true); return; }
-        var st = tMin(s.start_t), en = tMin(s.end_t), sp = tMin(split);
-        var inside = en <= st ? (sp > st || sp < en) : (sp > st && sp < en);   // sleepovers cross midnight
-        if (!inside) { toast('That time is not inside this shift (' + fmtRange(s.start_t, s.end_t) + ').', true); return; }
+        if (!split) { toast('Pick the handover time.', true); return; }
+        var segDate = evSplitSegmentDate(s.date, s.start_t, s.end_t, split);   // next day when the split is after midnight
+        if (!segDate) { toast('That time is not inside this shift (' + fmtRange(s.start_t, s.end_t) + ').', true); return; }
         var origEnd = s.end_t, wid = splitSel.value || null, btn = e.currentTarget;
         function doSplit(){
           busyBtn(btn, true);
@@ -587,7 +577,7 @@ function openEditRoster(s){
               if (!/PGRST202|Could not find the function|404/.test(err.message || '')) { busyBtn(btn, false); toast(err.message, true); return; }
               var firstDone = false;
               sbUpd('ac_shifts', 'id=eq.' + s.id, { end_t: split })
-                .then(function(){ firstDone = true; return sbIns('ac_shifts', [{ client_id: s.client_id, req_id: s.req_id, date: s.date, start_t: split, end_t: origEnd, type: s.type, worker_id: wid }]); })
+                .then(function(){ firstDone = true; return sbIns('ac_shifts', [{ client_id: s.client_id, req_id: s.req_id, date: segDate, start_t: split, end_t: origEnd, type: s.type, worker_id: wid }]); })
                 .then(ok)
                 ["catch"](function(err2){
                   busyBtn(btn, false);
@@ -597,7 +587,7 @@ function openEditRoster(s){
             });
         }
         var w2 = wid ? workerById(wid) : null;
-        if (w2 && doubleBooked(w2, { id: null, date: s.date, start_t: split, end_t: origEnd }))
+        if (w2 && doubleBooked(w2, { id: null, date: segDate, start_t: split, end_t: origEnd }))
           confirmDlg('Double booking', w2.name + ' already has an overlapping shift then. Split anyway?', 'Split anyway', doSplit, true);
         else doSplit();
       } }, 'Split shift'),

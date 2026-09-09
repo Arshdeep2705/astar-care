@@ -5,7 +5,7 @@ var XP_TYPES = [
   { id: 'near',      label: 'Near misses',            help: 'One near miss record per page.' },
   { id: 'care',      label: 'Personal care logs',     help: 'One shift\'s care log per page.' },
   { id: 'overnight', label: 'Overnight summaries',    help: 'One night per page (11pm–7am block figures).' },
-  { id: 'summary',   label: 'Summary report',         help: 'The reviewed evidence summary: coverage, overnight, daytime, incidents, gaps, methodology and source index.' }
+  { id: 'summary',   label: 'Summary (analytics)',    help: 'The Summary tab figures and charts for the selected participant and period.' }
 ];
 
 function openExportOptions(){
@@ -139,10 +139,10 @@ function exportIncident(ir){
   if (ir.is_fall) rows.push(
     ['Where did the fall happen', ir.fall_location === 'Other' && ir.fall_location_other ? 'Other — ' + ir.fall_location_other : ir.fall_location],
     ['Happened during a transfer', ir.during_transfer == null ? 'Not recorded' : yn(ir.during_transfer)],
-    ['Was a second person needed to get the participant up?', yn(ir.second_person_needed)],
     ['Minutes on the floor before being helped up', ir.minutes_on_floor != null ? ir.minutes_on_floor : 'Not recorded'],
     ['Was equipment involved?', yn(ir.equipment_involved) + (ir.equipment_involved && ir.equipment_desc ? '. ' + ir.equipment_desc : '')]
   );
+  if (ir.is_fall && ir.second_person_needed) rows.push(['Recorded on this report (question retired 9 Sep 2026)', 'Another person helped the participant up']);
   rows.push(
     ['8. Was there any unauthorised use of restricted practice', ir.restrictive === 'No' ? 'No' : 'Yes'],
     ['9. Type of unauthorised restrictive practice', ir.restrictive === 'No' ? 'Not applicable' : (ir.restrictive_types || []).join(', ')],
@@ -153,7 +153,7 @@ function exportIncident(ir){
     ['14. Property damage information', ir.property_damage === 'No' ? 'Not applicable' : ir.property_info],
     ['15. Photos of property damage', ir.property_damage === 'No' ? 'Not applicable' : ((ir.property_photos || []).length ? (ir.property_photos.length + ' photo(s) on file') : 'None attached')],
     ['16. Were emergency services called at all during this incident?', (ir.emergency || []).length ? ir.emergency.join(', ') : 'No'],
-    ['17. Were there any injuries?', ir.injuries === 'No' ? 'No' : 'Yes'],
+    ['17. Were there any injuries?', ir.injuries == null || ir.injuries === '' ? 'Not answered' : (ir.injuries === 'No' ? 'No' : 'Yes')],
     ['18. Who was injured and how did this injury happen?', ir.injuries === 'No' ? 'Not applicable' : ir.injury_who],
     ['19. What kind of injury', ir.injuries === 'No' ? 'Not applicable' : ir.injury_kind]
   );
@@ -169,7 +169,6 @@ function exportNearMiss(nm){
    ['Where it happened', nm.location === 'Other' && nm.location_other ? 'Other — ' + nm.location_other : nm.location],
    ['Happened during a transfer', nm.during_transfer == null ? 'Not recorded' : yn(nm.during_transfer)],
    ['What nearly happened', nm.description], ['What stopped it becoming a fall', nm.prevented_by],
-   ['At or beyond what one worker can safely manage alone', yn(nm.single_worker_capacity)],
    ['Equipment contributed', yn(nm.equipment_factor) + (nm.equipment_factor && nm.equipment_desc ? '. ' + nm.equipment_desc : '')]
   ].forEach(function(r){ box.appendChild(xpRow(r[0], r[1])); });
   return box;
@@ -178,7 +177,7 @@ function exportCareLog(l){
   var box = el('div', { 'class': 'xp-rec xp-care' }, [ el('div', { 'class': 'xp-rec-h' }, 'Personal care log') ]);
   var t = el('table', { 'class': 'xp-tbl xp-tbl-sm' });
   [['Pad changes (wet)', l.pad_wet], ['Pad changes (bowel movement)', l.pad_bowel], ['Times found wet in bed', l.bed_wet], ['Bedding changes', l.bedding_changes],
-   ['Shower', l.shower_offered ? (l.shower_done ? 'Offered and done' : 'Offered and declined') : 'Not offered this shift'],
+   ['Shower', l.shower_offered ? (l.shower_done === true ? 'Offered and done' : (l.shower_done === false ? 'Offered and declined' : 'Offered; outcome not recorded')) : 'Not offered this shift'],
    ['Prompts before the shower was accepted', l.shower_offered ? l.shower_prompts : 'n/a'],
    ['Other care refusals needing prompting', l.care_refusals], ['Assisted transfers', l.transfers], ['Transfers one worker could not do safely alone', l.transfer_unsafe_alone]
   ].forEach(function(r){ t.appendChild(el('tr', null, [ el('td', null, r[0]), el('td', { 'class': 'n' }, String(r[1])) ])); });
@@ -190,9 +189,8 @@ function exportOvernight(l){
   var box = el('div', { 'class': 'xp-rec xp-on' }, [ el('div', { 'class': 'xp-rec-h' }, 'Overnight summary · 11:00pm to 7:00am block') ]);
   var t = el('table', { 'class': 'xp-tbl xp-tbl-sm' });
   [['Went to bed at', l.bed_time ? fmtTime(l.bed_time) : '—'], ['Up for the day at', l.wake_time ? fmtTime(l.wake_time) : '—'],
-   ['Times woke needing support before being up for the day', l.wakes],
-   ['Hours asleep in the block', hrsFmt(a) + ' h'], ['Hours of active support in the block', hrsFmt(x) + ' h'],
-   ['Active support above the 2-hour sleepover allowance', hrsFmt(Math.max(0, x - 2)) + ' h']
+   ['Times woke needing support before being up for the day (final wake not counted)', l.wakes == null ? 'Not recorded' : l.wakes],
+   ['Hours asleep in the block', l.asleep_hours == null ? 'Not recorded' : hrsFmt(a) + ' h'], ['Hours of worker assistance in the block', l.active_hours == null ? 'Not recorded' : hrsFmt(x) + ' h']
   ].forEach(function(r){ t.appendChild(el('tr', null, [ el('td', null, r[0]), el('td', { 'class': 'n' }, String(r[1])) ])); });
   box.appendChild(t);
   return box;

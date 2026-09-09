@@ -75,7 +75,7 @@ function openNearMissModal(opts){
     during_transfer: nm ? (nm.during_transfer == null ? '' : (nm.during_transfer ? 'Yes' : 'No')) : '',
     description: nm ? nm.description : '',
     prevented_by: nm ? nm.prevented_by : '',
-    single_worker_capacity: nm ? (nm.single_worker_capacity ? 'Yes' : 'No') : 'No',
+    single_worker_capacity: nm ? !!nm.single_worker_capacity : false,   // retired question (2026-09-09): historical value kept
     equipment_factor: nm ? (nm.equipment_factor ? 'Yes' : 'No') : 'No',
     equipment_desc: nm ? (nm.equipment_desc || '') : ''
   };
@@ -99,7 +99,7 @@ function openNearMissModal(opts){
       location_other: f.location === 'Other' ? f.location_other : '',
       during_transfer: f.during_transfer === 'Yes',
       description: f.description, prevented_by: f.prevented_by,
-      single_worker_capacity: f.single_worker_capacity === 'Yes',
+      single_worker_capacity: f.single_worker_capacity,
       equipment_factor: f.equipment_factor === 'Yes',
       equipment_desc: f.equipment_factor === 'Yes' ? f.equipment_desc : ''
     };
@@ -132,7 +132,6 @@ function openNearMissModal(opts){
     el('div', { 'class': 'q-help', style: 'margin:-6px 0 12px' }, 'A transfer is any move you assisted — bed, chair, toilet, shower, car, anywhere.'),
     evText(f, 'description', 'What nearly happened', 'e.g. Tim slipped forward during the couch to wheelchair transfer and started to go down.', true),
     evText(f, 'prevented_by', 'What stopped it becoming a fall', 'e.g. The worker braced him against the wheelchair and lowered him back onto the couch.', true),
-    evYesNo(f, 'single_worker_capacity', 'Was this at or beyond what one worker can safely manage alone?'),
     evYesNo(f, 'equipment_factor', 'Did equipment contribute (wheelchair, shower chair, bed, ramp)?', function(){ eqDet.style.display = f.equipment_factor === 'No' ? 'none' : ''; }),
     eqDet,
     errBox

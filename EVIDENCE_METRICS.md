@@ -1,69 +1,82 @@
-# Astar Care — Summary tab metric definitions (v2, 2026-09-07)
+# Astar Care — Summary metric definitions (metrics-v3, 2026-09-09)
 
-These definitions are shown in the app's Summary → "How the figures are built" panel and are
-embedded in every exported report. `calc_version` in a finalised report records the app build
-and this document's version (`metrics-v2`).
+The Summary tab is a data-analytics view of what the support workers recorded. It answers
+"what has been recorded in this period?" with counts, durations, dates and sample sizes. It does
+not request support, propose staffing, argue funding or draw clinical conclusions. These
+definitions are embedded in every export (appendix) and in the app as `EV_DEFINITIONS`
+(`parts/p9a_metrics.js`). Version string: `metrics-v3` + app build.
 
-## General rules
+## Event / source model
 
 | Rule | Definition |
 |---|---|
-| Timezone | All dates and times are the participant's service-local time (Australia/Melbourne), as entered by the worker. The app runs in the device's local timezone; the export states the timezone. Daylight-saving transitions are handled by counting recorded interval blocks, never by subtracting clock times across the change. |
-| Event time vs record time | Every figure uses the **event** date/time recorded on the form (shift date, incident date/time, near-miss date/time, overnight bed/up times). Record creation and edit timestamps are never used in calculations and never appear in exports. |
-| Overnight labelling | An overnight (sleepover) shift is labelled by its start date and end date ("night of Mon 31 Aug → Tue 1 Sep"). It is counted under the night it **started**. |
-| Rostered vs documented | *Rostered* = a shift row exists for the participant. *Documented* = a record of the relevant type exists for that shift. Rostered does not mean delivered or documented. Coverage is always shown as **n documented of N rostered** with the percentage beside the counts. |
-| Missing vs zero | A missing record (no form) is **not recorded** and is excluded from numerators and denominators. A form field left blank is **not recorded** (stored as null) and is excluded from that measure. A recorded 0 is a recorded 0. Records created before 2026-09 stored blank numeric answers as 0; those rows are shown in "Sources and checks" so a reviewer can decide. |
-| Partial records | A night with an overnight summary but no sleep-log hours, or a care log with only some measures, counts only for the measures it actually contains. It never counts as a complete night/day. |
-| Deduplication | One real event described in several places (shift note, incident report, uploaded PDF) counts **once**. The structured record (incident report / near-miss entry) is the counted instance; reviewed observations that duplicate it are linked via `duplicate_of` and excluded from totals. Uncertain duplicates are flagged for review, not merged automatically. |
-| Excluded sources | Sources marked *excluded* (training samples, generated examples, demonstrations) never enter any calculation. Observations still `proposed` or `rejected` never enter published figures. |
-| Averages of clock times | Bed times and up-for-the-day times are averaged as minutes after 12:00 noon of the start date, so a 23:30 bed time and a 00:30 bed time average to 00:00, not 12:00. |
-| Full-period fetch | The Summary fetches the selected period from the server in pages of 1,000 rows per table until exhausted. It does not use the app's rolling cache. |
+| One event, several sources | A real event may be described in an incident report, a sentence in a shift note and a page of an uploaded document. It is counted **once**. The structured record (incident report / near miss record) is the counted instance. A reviewed observation that repeats it is **linked** (`duplicate_of_record`, or `duplicate_of` another observation) and kept as a source reference only. |
+| Unlinked look-alikes | Two counted events on the same date within 30 minutes are listed under Checks as a possible duplicate. Both stay counted until a person links them. Same date alone is never treated as a duplicate. |
+| What enters a figure | Structured records in the period, plus observations with `status = accepted`, no duplicate link, from a non-excluded source. Proposed and rejected observations, and excluded sources (training samples, generated examples), never enter any figure. |
+| Demonstration mode | Uses an entirely synthetic participant, shifts and records (`evDemoDataset`). No real record is mixed in. |
 
-## Safety events
+## Period, scope and dates
 
-| Metric | Source | Unit | Numerator / denominator | Notes |
-|---|---|---|---|---|
-| Falls | `ac_incident_forms` where `is_fall = true` and `incident_date` in period | count | — | A fall is only what the worker recorded as a fall. Being in bed, a bathroom or a vehicle is not treated as a transfer unless the fall location says so **and** the report describes a transfer. |
-| Near misses | `ac_near_misses` with `nm_date` in period | count | — | Prevented falls with no injury, as recorded. |
-| Falls needing a second person | falls with `second_person_needed = true` | count / falls | | "Second person" is whoever helped (worker, neighbour, ambulance). It is not a staffing recommendation. |
-| Minutes on the floor | sum of `minutes_on_floor` over falls where it is recorded | minutes; n recorded / falls | | Shown as "time on the floor before being helped up" — not "time waiting for help". Falls with no minutes recorded are listed as *not recorded*. |
-| Emergency calls | incidents with any `emergency` value other than "No" | count | | Lists the service(s) called. A cancelled ambulance is still a call. |
-| Injuries | incidents with `injuries` ≠ "No" | count | | Uses the worker's answer to Q17 only. |
-| Equipment involved | incidents with `equipment_involved` or type "Equipment failure", plus near misses with `equipment_factor` | count | | |
-| Transfer-related | fall/near-miss location in {Bed, Shower, Toilet, Couch to wheelchair, Wheelchair to bed, Vehicle} **and** the worker answered the transfer question or the location itself names a transfer | count / events | | Location alone does not prove a transfer was in progress; the report says "at a transfer location" where the record does not say more. |
-
-## Overnight (sleepover) — reported inside the 11:00 pm to 7:00 am block
-
-| Metric | Source | Unit | Definition |
-|---|---|---|---|
-| Nights rostered | `ac_shifts` type sleepover, date in period | count | Denominator for coverage. |
-| Nights with an overnight summary | `ac_overnight_logs` joined to those shifts | count / nights rostered | Coverage. |
-| Hours asleep | `asleep_hours` | hours per night | As transcribed by the worker from the paper sleep log (✓ blocks × 0.25). |
-| Hours of direct worker assistance | `active_hours` | hours per night | X blocks × 0.25: intervals where the worker was **assisting** (toileting, changes, transfers, prompting). |
-| Awake, no assistance | 8 − asleep − active | hours per night | Derived; shown separately, never added to assistance. |
-| Unrecorded | night rostered but no summary, or summary without hours | — | Shown as a gap on the chart, not as 0. |
-| Wakes needing support | `wakes` | count per night | Times the participant woke needing support **before** the wake they got up for the day. The final wake is not counted here; it is the "up for the day" time. |
-| Nights above the 2-hour inclusion | active_hours > 2 | count / nights with hours | The NDIS sleepover price includes up to 2 hours of active support per night; time beyond that is claimable separately (NDIS Pricing Arrangements and Price Limits 2026-27, sleepover supports; NDIS Commission "Sleepover shifts" guidance). The reference line on the chart is drawn against **active support hours only**. Crossing it is a pricing fact, not an eligibility finding. |
-| Support outside the block | shift note narrative before 11 pm / after 7 am | — | Not in these figures. Reviewed observations with category *overnight_assist* outside 23:00–07:00 appear in the separate "full shift" table. |
-
-## Daytime support and proposed 2:1
-
-| Column | Definition |
+| Rule | Definition |
 |---|---|
-| Task / activity | From the care log measure or a reviewed observation. |
-| Assistance observed | The care log count or the observation's assist type. |
-| Frequency | Per day = total ÷ days that have a care log. Never divided by rostered days. |
-| Actual staffing | Workers actually involved, from the observation (`workers_involved`) or the incident's "second person" answer. |
-| Proposed staffing | Free-text entered by the admin on the Summary, labelled *proposed*. Never derived from the data. |
-| Clinician recommendation | Only from an uploaded source marked kind = upload with author stated (e.g. OT report) and a reviewed observation quoting it. |
-| Evidence gap | Automatically "no assessment on file" when no clinician source exists for the task. |
+| Timezone | Service-local time (Australia/Melbourne) as entered by the worker. The export states the timezone. |
+| Default period | The last 4 completed weeks ending yesterday. Presets: 7 days, 4 weeks, 12 weeks. |
+| Scope | A shift is *in scope* when its rostered end has passed. Shifts in progress or not started are shown separately ("not yet finished") and are never counted as not recorded. |
+| Night keying | A sleepover night is labelled by the date it started and runs to 07:00 next morning. Overnight events after midnight belong to the night that started the evening before (`evNightOf`). The period boundary is applied to the night, so a 03:30 event on the morning after the last day still belongs to the last night. |
+| Daylight saving | The 23:00–07:00 window length is taken from the clock (`evBlockHours`): 7 h on the spring-forward night, 9 h on the fall-back night. |
+| Buckets | Periods of 35 days or less are bucketed by day; longer periods by ISO week (Monday). |
+| Full retrieval | Every table is fetched for the participant and period in pages of 1,000 rows with a stable `id` order until exhausted. Nothing comes from the app's rolling cache. |
 
-The four facts are kept apart in every table: *two workers actually assisted* · *one worker reported difficulty* · *a clinician recommended two* · *the provider is requesting two*.
+## Recorded, partial, not recorded
 
-## Funding context
+| State | Meaning |
+|---|---|
+| Recorded / complete | A structured record exists with the measure filled in. |
+| Partial | A record exists but the measure is blank; or, for a night, only reviewed observations with intervals exist. |
+| Not recorded | No record. Shown as "Not recorded" or "Insufficient data", never as 0. Excluded from numerators and denominators. |
+| Pre-cutoff rows | Structured logs saved before 7 Sep 2026 stored blank answers as 0. They are counted as recorded zeros and listed under Checks. |
 
-Plan allocation, remaining balance, delivered, claimed and provider-funded amounts are separate fields entered by the admin on the Summary with the document they came from. Nothing is inferred from worker pay rates or from a dollar amount alone. A shortfall is displayed only when allocation, period and claimed figures are all present and verified.
+## Overview metrics
 
-## Report versions
+| Metric | Value | Denominator / note |
+|---|---|---|
+| Falls recorded | incidents with `is_fall`, plus accepted incident observations whose type is a fall | of incident reports in period |
+| Near misses recorded | near miss records + accepted near-miss observations | days with a record |
+| Assisted transfers recorded | sum of care-log `transfers` where answered; on a day with no care log, accepted daytime "Transfer" observations are counted instead (never both) | logs answered of logs; reviewed count on unlogged days |
+| Incidents involving an emergency call | incidents where any emergency service was recorded as called | of incidents; the form records neither the number of calls nor attendance |
+| Average recorded overnight assistance | mean of per-night recorded assistance hours | nights with a value of nights in scope; how many came from reviewed intervals |
+| Nights with complete overnight data | nights with an overnight summary that has hours | of nights in scope; partial and not-recorded counts |
 
-A finalised report stores: period, timezone, calc_version, the included source ids and accepted observation ids, the full computed dataset (snapshot), reviewer name and finalised time, and the export timestamp. Later data changes do not alter a finalised version. Re-running the report creates a new draft version.
+## Overnight
+
+| Measure | Definition |
+|---|---|
+| Assistance hours (per night) | From the overnight summary: X-coded 15-minute blocks inside 23:00–07:00 = elapsed time the worker was assisting. Where no summary exists but accepted `overnight_assist` observations have start **and** end times, their **merged** elapsed time is shown and the night is *partial*. Overlapping intervals are merged, never added (`evMergeIntervals`). |
+| Awake, no assistance | Only when the whole window is accounted for: window length − asleep − assistance, from a complete summary. Otherwise not shown. |
+| Wakes | The summary's count of times the participant woke needing support **before** the wake they got up for the day. The final wake is not counted. A wake is not an episode. |
+| Episodes | Merged intervals of accepted `overnight_assist` observations for the night (an observation without an end time occupies a 15-minute block). |
+| By activity | Episodes per recorded activity; hours only over observations with both times. Note length never implies duration. |
+| Timeline | Accepted overnight observations with a stated start, plotted on the night they belong to; bar = start and end recorded, dot = start only; unknown times are not plotted. |
+
+## Incidents
+
+| Measure | Definition |
+|---|---|
+| Incident reports | structured reports + accepted incident observations (counted once) |
+| Falls | `is_fall` on the report; on an observation, a type or description that says fall |
+| During a transfer | the worker's answer (`during_transfer`); `inferred` only for pre-2026-09-09 rows whose location itself names a transfer; otherwise `unknown`. A location alone never implies a transfer. |
+| Injuries | `yes` / `no` / `unknown` from the answer; unanswered stays unknown and is listed under Checks |
+| Time on the floor | sum of `minutes_on_floor` where recorded, with the count of falls it was recorded on; described as time before being helped up |
+| Emergency | incidents involving a call; the services recorded |
+
+## Near misses
+
+Counts, days with a record, equipment involvement and transfer state as recorded. "What prevented harm" groups the free-text answer into steadied/held, lowered safely, equipment/rail, another person, other, not recorded. A near miss is never a fall.
+
+## Personal care
+
+Totals and per-day are over the logs that answered the measure; per-day divides by days with that measure recorded. Showers: offered / done / declined / outcome not recorded (offered with no completion answer, or a pre-cutoff `false`).
+
+## Versions
+
+Finalising stores in `ac_report_versions.snapshot`: the full computed dataset (including `sourceIndex` with content hashes and `recordIds`), the export options, timezone, the authenticated reviewer (worker id, name, email) and the time. The export renders **only** from the stored dataset. A finalised row cannot be updated or deleted (database trigger). Versions produced by earlier formats are shown as legacy and never re-rendered into the new format.
