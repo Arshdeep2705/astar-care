@@ -1,7 +1,13 @@
 /* ================= evidence logs: near miss, personal care log, overnight summary ================= */
 /* These quick structured forms feed the admin Reports tab. Nothing is parsed out of
    the free-text notes — every number on a report comes from a field a worker filled. */
-var NM_LOCATIONS = ['Bed', 'Shower', 'Toilet', 'Couch to wheelchair', 'Wheelchair to bed', 'Vehicle', 'Community', 'Other'];
+/* Where it happened. Places, not transfer types — whether a transfer was happening is asked
+   separately (during_transfer), because a transfer can happen anywhere. The two old
+   "X to Y" values are kept so records saved before 2026-09-09 still round-trip in the picker. */
+var NM_LOCATIONS = ['Bed', 'Bedroom', 'Bathroom', 'Shower', 'Toilet', 'Lounge or living room',
+  'Kitchen', 'Dining area', 'Hallway or doorway', 'Backyard or outside', 'Ramp or steps',
+  'Vehicle', 'Community', 'Couch to wheelchair', 'Wheelchair to bed', 'Other'];
+/* legacy only: used to guess "transfer-related" for rows saved before during_transfer existed */
 var TRANSFER_LOCS = ['Bed', 'Shower', 'Toilet', 'Couch to wheelchair', 'Wheelchair to bed', 'Vehicle'];
 
 /* small form helpers shared by the three modals */
@@ -65,6 +71,8 @@ function openNearMissModal(opts){
     nm_date: nm ? (nm.nm_date || '') : (shift ? shift.date : todayYmd()),
     nm_time: nm ? (nm.nm_time || '') : '',
     location: nm ? nm.location : '',
+    location_other: nm ? (nm.location_other || '') : '',
+    during_transfer: nm ? (nm.during_transfer == null ? '' : (nm.during_transfer ? 'Yes' : 'No')) : '',
     description: nm ? nm.description : '',
     prevented_by: nm ? nm.prevented_by : '',
     single_worker_capacity: nm ? (nm.single_worker_capacity ? 'Yes' : 'No') : 'No',
@@ -72,18 +80,24 @@ function openNearMissModal(opts){
     equipment_desc: nm ? (nm.equipment_desc || '') : ''
   };
   var eqDet = el('div', { style: f.equipment_factor === 'No' ? 'display:none' : '' }, evText(f, 'equipment_desc', 'Which equipment, and how it contributed'));
-  var locSel = el('select', { 'class': 'sel', onchange: function(e){ f.location = e.target.value; } },
+  var locOther = el('div', { style: f.location === 'Other' ? '' : 'display:none' },
+    evText(f, 'location_other', 'Say where it was'));
+  var locSel = el('select', { 'class': 'sel', onchange: function(e){ f.location = e.target.value; locOther.style.display = f.location === 'Other' ? '' : 'none'; } },
     [el('option', { value: '' }, 'Choose…')].concat(NM_LOCATIONS.map(function(l){ return el('option', { value: l, selected: f.location === l }, l); })));
   var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
   var saveBtn = el('button', { 'class': 'btn btn-pri', onclick: save }, editing ? 'Save changes' : 'Submit near miss');
   function fail(msg){ errBox.style.display = 'block'; errBox.textContent = msg; busyBtn(saveBtn, false); }
   function save(){
     if (!f.location) return fail('Choose where it happened.');
+    if (f.location === 'Other' && !f.location_other.trim()) return fail('Say where it was.');
+    if (f.during_transfer === '') return fail('Say whether it happened during a transfer.');
     if (!f.description.trim()) return fail('Describe what nearly happened.');
     errBox.style.display = 'none';
     busyBtn(saveBtn, true);
     var rec = {
       staff_name: f.staff_name, nm_date: f.nm_date || null, nm_time: f.nm_time || '', location: f.location,
+      location_other: f.location === 'Other' ? f.location_other : '',
+      during_transfer: f.during_transfer === 'Yes',
       description: f.description, prevented_by: f.prevented_by,
       single_worker_capacity: f.single_worker_capacity === 'Yes',
       equipment_factor: f.equipment_factor === 'Yes',
@@ -113,6 +127,9 @@ function openNearMissModal(opts){
       el('div', { 'class': 'field' }, [ evLabel('Approximate time'), el('input', { 'class': 'inp', type: 'time', value: f.nm_time, onchange: function(e){ f.nm_time = e.target.value; } }) ])
     ]),
     el('div', { 'class': 'field' }, [ evLabel('Where did it happen'), locSel ]),
+    locOther,
+    evYesNo(f, 'during_transfer', 'Did it happen during a transfer?'),
+    el('div', { 'class': 'q-help', style: 'margin:-6px 0 12px' }, 'A transfer is any move you assisted — bed, chair, toilet, shower, car, anywhere.'),
     evText(f, 'description', 'What nearly happened', 'e.g. Tim slipped forward during the couch to wheelchair transfer and started to go down.', true),
     evText(f, 'prevented_by', 'What stopped it becoming a fall', 'e.g. The worker braced him against the wheelchair and lowered him back onto the couch.', true),
     evYesNo(f, 'single_worker_capacity', 'Was this at or beyond what one worker can safely manage alone?'),

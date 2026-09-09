@@ -53,7 +53,18 @@ var ds4 = M.evBuildDataset({ client: C, from: '2030-03-01', to: '2030-03-07', sh
 eq('falls 1, near misses 1, both counted', [ds4.safety.falls, ds4.safety.nearMisses], [1, 1]);
 eq('possible duplicate flagged', ds4.checks.filter(function(c){ return c.kind === 'possible duplicate'; }).length, 1);
 eq('minutes on floor: not recorded → 0 recorded of 1 fall', [ds4.safety.floorMinutes, ds4.safety.floorRecorded], [0, 0]);
-eq('bed location counts as transfer-related only via location list (documented rule)', ds4.safety.transferRelated, 2);
+eq('legacy rows with no during_transfer answer fall back to the location list', ds4.safety.transferRelated, 2);
+
+/* 5b. during_transfer is the answer when it was asked: a transfer anywhere counts, and a
+   non-transfer at a "transfer location" does not. This is the 2026-09-09 fix. */
+var incsT = [{ id: 'i2', participant_id: C.id, incident_date: '2030-03-02', incident_time: '09:00', is_fall: true, fall_location: 'Other', fall_location_other: 'Front doorway', during_transfer: true, second_person_needed: false, minutes_on_floor: null, emergency: ['No'], injuries: 'No', incident_types: ['Other'], incident_type_other: 'Trip on threshold', shift_id: 'n2' }];
+var nmsT = [{ id: 'm2', participant_id: C.id, nm_date: '2030-03-02', nm_time: '14:00', location: 'Bed', during_transfer: false, single_worker_capacity: false, equipment_factor: false, shift_id: 'n2' },
+            { id: 'm3', participant_id: C.id, nm_date: '2030-03-03', nm_time: '15:00', location: 'Kitchen', during_transfer: true, single_worker_capacity: true, equipment_factor: false, shift_id: 'n2' }];
+var ds4b = M.evBuildDataset({ client: C, from: '2030-03-01', to: '2030-03-07', shifts: shifts, overnightLogs: overnight, incidents: incsT, nearMisses: nmsT, careLogs: [], notes: [], sources: [], observations: [] });
+eq('a transfer in a doorway and in the kitchen both count; a non-transfer in bed does not', ds4b.safety.transferRelated, 2);
+eq('Other location prints what it actually was', ds4b.safety.locations.map(function(l){ return l.location; }).sort(), ['Bed', 'Front doorway', 'Kitchen']);
+eq('the bed row is not marked transfer-related', ds4b.safety.locations.filter(function(l){ return l.location === 'Bed'; })[0].transfer, false);
+eq('the kitchen row is marked transfer-related', ds4b.safety.locations.filter(function(l){ return l.location === 'Kitchen'; })[0].transfer, true);
 eq('weekly buckets cover the period', ds4.safety.weekly.length, 2);
 
 /* 6. observations: only accepted, non-duplicate, non-excluded, in period */

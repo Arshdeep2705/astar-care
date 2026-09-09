@@ -5,6 +5,7 @@
 var EV_CALC_VERSION = 'metrics-v2';
 var EV_SLEEP_BLOCK = { from: '23:00', to: '07:00', hours: 8 };
 var EV_SLEEPOVER_INCLUDED_HOURS = 2;   // NDIS PAPL: up to 2 h of active support inside an 8 h sleepover
+/* legacy fallback only: rows saved before during_transfer existed are judged by location */
 var EV_TRANSFER_LOCS = ['Bed', 'Shower', 'Toilet', 'Couch to wheelchair', 'Wheelchair to bed', 'Vehicle'];
 var EV_BLANK_ZERO_CUTOFF = '2026-09-07';  // rows created before this stored blank answers as 0
 
@@ -18,7 +19,7 @@ var EV_METHOD = [
   ['One event, counted once', 'An event described in a note, an incident report and an uploaded document counts once. The structured record is the counted instance; reviewed observations that duplicate it are linked and excluded from totals. Uncertain duplicates are flagged for a person to decide.'],
   ['Excluded material', 'Sources marked excluded (training samples, generated examples, demonstrations) and observations still proposed or rejected never enter any figure.'],
   ['The 2-hour line', 'The NDIS Pricing Arrangements and Price Limits provide for up to 2 hours of active support inside an 8-hour sleepover; support beyond that is claimable separately (NDIS Quality and Safeguards Commission, “Sleepover shifts”, worker alert dated August 2026). The line is drawn against direct worker assistance only. Crossing it is a pricing fact, not an eligibility finding.'],
-  ['Transfers', 'A fall or near miss is transfer-related only when its recorded location names a transfer. Being in bed, a bathroom or a vehicle does not by itself establish that a transfer was happening.'],
+  ['Transfers', 'Transfer-related means the worker answered yes to "did it happen during a transfer". A transfer can happen anywhere, so the place it was recorded in does not decide this. Records saved before that question existed (before 9 September 2026) are counted only when the recorded location itself names a transfer, which understates rather than overstates them.'],
   ['Staffing', 'Four facts are kept apart: two workers actually assisted; one worker reported difficulty; a clinician recommended two; the provider is requesting two. Nothing here infers a staffing requirement from a fall, weight, an emergency recovery or a neighbour helping.']
 ];
 
@@ -84,15 +85,22 @@ function evBuildDataset(inp){
   var emerg = incs.filter(function(i){ return (i.emergency || []).some(function(x){ return x && x !== 'No'; }); });
   var injuries = incs.filter(function(i){ return i.injuries && i.injuries !== 'No'; });
   var equip = incs.filter(function(i){ return i.equipment_involved || (i.incident_types || []).indexOf('Equipment failure') >= 0; }).length + nms.filter(function(n){ return n.equipment_factor; }).length;
-  function transferRelated(loc){ return EV_TRANSFER_LOCS.indexOf(loc) >= 0; }
-  var transferEvents = falls.filter(function(i){ return transferRelated(i.fall_location); }).length + nms.filter(function(n){ return transferRelated(n.location); }).length;
+  /* a transfer can happen anywhere, so the worker is asked outright. during_transfer true/false is
+     the answer; null means the row predates the question and we fall back to the old location test. */
+  function transferRelated(rec, loc){
+    if (rec && rec.during_transfer === true) return true;
+    if (rec && rec.during_transfer === false) return false;
+    return EV_TRANSFER_LOCS.indexOf(loc) >= 0;
+  }
+  var transferEvents = falls.filter(function(i){ return transferRelated(i, i.fall_location); }).length + nms.filter(function(n){ return transferRelated(n, n.location); }).length;
   var weeks = []; for (var w = evMondayOf(from); w <= to; w = evAddDays(w, 7)) weeks.push(w);
   var weekly = weeks.map(function(w0){
     return { week: w0, falls: falls.filter(function(i){ return evMondayOf(i.incident_date) === w0; }).length, nearMisses: nms.filter(function(n){ return evMondayOf(n.nm_date) === w0; }).length };
   });
   var loc = {};
-  falls.forEach(function(i){ var k = i.fall_location || 'Not recorded'; loc[k] = loc[k] || { falls: 0, nearMisses: 0 }; loc[k].falls++; });
-  nms.forEach(function(n){ var k = n.location || 'Not recorded'; loc[k] = loc[k] || { falls: 0, nearMisses: 0 }; loc[k].nearMisses++; });
+  function locName(rec, base){ return (base === 'Other' && rec.location_other) ? rec.location_other : (base === 'Other' && rec.fall_location_other) ? rec.fall_location_other : base; }
+  falls.forEach(function(i){ var k = locName(i, i.fall_location) || 'Not recorded'; loc[k] = loc[k] || { falls: 0, nearMisses: 0, transfer: false }; loc[k].falls++; if (transferRelated(i, i.fall_location)) loc[k].transfer = true; });
+  nms.forEach(function(n){ var k = locName(n, n.location) || 'Not recorded'; loc[k] = loc[k] || { falls: 0, nearMisses: 0, transfer: false }; loc[k].nearMisses++; if (transferRelated(n, n.location)) loc[k].transfer = true; });
   var safety = {
     falls: falls.length, nearMisses: nms.length, secondPerson: secondPerson.length,
     floorMinutes: evSum(floorRecorded.map(function(i){ return i.minutes_on_floor; })), floorRecorded: floorRecorded.length,
@@ -100,7 +108,7 @@ function evBuildDataset(inp){
     injuries: injuries.length, equipment: equip, transferRelated: transferEvents, events: falls.length + nms.length,
     nmBeyondCapacity: nms.filter(function(n){ return n.single_worker_capacity; }).length,
     weekly: weekly,
-    locations: Object.keys(loc).map(function(k){ return { location: k, falls: loc[k].falls, nearMisses: loc[k].nearMisses, transfer: transferRelated(k) }; }).sort(function(a, b){ return (b.falls + b.nearMisses) - (a.falls + a.nearMisses); })
+    locations: Object.keys(loc).map(function(k){ return { location: k, falls: loc[k].falls, nearMisses: loc[k].nearMisses, transfer: loc[k].transfer }; }).sort(function(a, b){ return (b.falls + b.nearMisses) - (a.falls + a.nearMisses); })
   };
 
   /* ---- overnight: one row per ROSTERED night ---- */

@@ -505,7 +505,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260908055716';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260909132355';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -2268,8 +2268,14 @@ function openIncidentModal(opts){
     injuries: ir ? ir.injuries : 'No',
     injury_who: ir ? ir.injury_who : '',
     injury_kind: ir ? ir.injury_kind : '',
+    incident_type_other: ir ? (ir.incident_type_other || '') : '',
+    restrictive_other: ir ? (ir.restrictive_other || '') : '',
+    emergency_other: ir ? (ir.emergency_other || '') : '',
+    injury_kind_other: ir ? (ir.injury_kind_other || '') : '',
     is_fall: ir ? (ir.is_fall ? 'Yes' : 'No') : '',
     fall_location: ir ? (ir.fall_location || '') : '',
+    fall_location_other: ir ? (ir.fall_location_other || '') : '',
+    during_transfer: ir ? (ir.during_transfer == null ? '' : (ir.during_transfer ? 'Yes' : 'No')) : '',
     second_person_needed: ir ? (ir.second_person_needed ? 'Yes' : 'No') : '',
     minutes_on_floor: ir && ir.minutes_on_floor != null ? String(ir.minutes_on_floor) : '',
     equipment_involved: ir ? (ir.equipment_involved ? 'Yes' : 'No') : '',
@@ -2308,24 +2314,35 @@ function openIncidentModal(opts){
     });
     return wrap;
   }
-  function multiQ(n, label, key, options){
+  /* multi-pick; when the list carries an "Other" option, ticking it reveals a box for what it was */
+  function multiQ(n, label, key, options, otherKey){
     var wrap = el('div', { 'class': 'field' }, qLabel(n, label + ' (tick all that apply)'));
+    var otherBox = otherKey ? el('div', { style: f[key].indexOf('Other') >= 0 ? '' : 'display:none' }, [
+      el('input', { 'class': 'inp', placeholder: 'Say what it was', value: f[otherKey] || '',
+        oninput: function(e){ f[otherKey] = e.target.value; } })
+    ]) : null;
     options.forEach(function(o){
       wrap.appendChild(el('label', { 'class': 'checkrow' }, [
         el('input', { type: 'checkbox', checked: f[key].indexOf(o) >= 0, onchange: function(e){
           if (e.target.checked) f[key].push(o);
           else f[key].splice(f[key].indexOf(o), 1);
+          if (otherBox) otherBox.style.display = f[key].indexOf('Other') >= 0 ? '' : 'none';
         } }),
         el('span', { style: 'font-size:14px' }, o)
       ]));
     });
+    if (otherBox) wrap.appendChild(otherBox);
     return wrap;
   }
 
   /* fall details — feed the admin Reports tab (falls, 2:1 need, equipment) */
   function fallBlock(){
     var det = el('div', { style: f.is_fall !== 'Yes' ? 'display:none' : '' });
-    var locSel = el('select', { 'class': 'sel', onchange: function(e){ f.fall_location = e.target.value; } },
+    var locOther = el('div', { 'class': 'field', style: f.fall_location === 'Other' ? '' : 'display:none' }, [
+      el('label', null, 'Say where it was'),
+      el('input', { 'class': 'inp', value: f.fall_location_other, oninput: function(e){ f.fall_location_other = e.target.value; } })
+    ]);
+    var locSel = el('select', { 'class': 'sel', onchange: function(e){ f.fall_location = e.target.value; locOther.style.display = f.fall_location === 'Other' ? '' : 'none'; } },
       [el('option', { value: '' }, 'Choose…')].concat(NM_LOCATIONS.map(function(l){ return el('option', { value: l, selected: f.fall_location === l }, l); })));
     var eqDet = el('div', { style: f.equipment_involved !== 'Yes' ? 'display:none' : '' },
       el('div', { 'class': 'field' }, [ el('label', null, 'Which equipment, and what happened to it'),
@@ -2339,6 +2356,9 @@ function openIncidentModal(opts){
         })) ]);
     }
     det.appendChild(el('div', { 'class': 'field' }, [ el('label', null, 'Where did the fall happen'), locSel ]));
+    det.appendChild(locOther);
+    det.appendChild(yn('Did it happen during a transfer?', 'during_transfer'));
+    det.appendChild(el('div', { 'class': 'q-help', style: 'margin:-6px 0 12px' }, 'A transfer is any move you assisted — bed, chair, toilet, shower, car, anywhere.'));
     det.appendChild(yn('Was a second person needed to get the participant up?', 'second_person_needed'));
     det.appendChild(el('div', { 'class': 'field' }, [ el('label', null, 'Minutes on the floor before being helped up'),
       el('input', { 'class': 'inp', type: 'number', min: '0', inputmode: 'numeric', value: f.minutes_on_floor, oninput: function(e){ f.minutes_on_floor = e.target.value; } }) ]));
@@ -2353,7 +2373,7 @@ function openIncidentModal(opts){
 
   /* conditional sections */
   var secRestrictive = el('div', { style: f.restrictive === 'No' ? 'display:none' : '' },
-    multiQ(9, 'Type of unauthorised restrictive practice', 'restrictive_types', RESTRICTIVE_TYPES));
+    multiQ(9, 'Type of unauthorised restrictive practice', 'restrictive_types', RESTRICTIVE_TYPES, 'restrictive_other'));
   var secProperty = el('div', { style: f.property_damage === 'No' ? 'display:none' : '' }, [
     longQ(14, 'Please provide information', 'property_info'),
     el('div', { 'class': 'field' }, [
@@ -2361,12 +2381,16 @@ function openIncidentModal(opts){
       attachWidget(existingPhotos, pendingPhotos, function(i){ removedPaths.push(existingPhotos[i].path); existingPhotos.splice(i, 1); })
     ])
   ]);
-  var injuryKindSel = el('select', { 'class': 'sel', onchange: function(e){ f.injury_kind = e.target.value; } });
+  var injuryOther = el('div', { 'class': 'field', style: f.injury_kind === 'Other' ? '' : 'display:none' }, [
+    el('input', { 'class': 'inp', placeholder: 'Say what kind of injury', value: f.injury_kind_other,
+      oninput: function(e){ f.injury_kind_other = e.target.value; } })
+  ]);
+  var injuryKindSel = el('select', { 'class': 'sel', onchange: function(e){ f.injury_kind = e.target.value; injuryOther.style.display = f.injury_kind === 'Other' ? '' : 'none'; } });
   injuryKindSel.appendChild(el('option', { value: '' }, 'Choose…'));
   INJURY_KINDS.forEach(function(k){ injuryKindSel.appendChild(el('option', { value: k, selected: f.injury_kind === k }, k)); });
   var secInjury = el('div', { style: f.injuries === 'No' ? 'display:none' : '' }, [
     longQ(18, 'Who was injured and how did this injury happen?', 'injury_who'),
-    el('div', { 'class': 'field' }, [ qLabel(19, 'What kind of injury:'), injuryKindSel ])
+    el('div', { 'class': 'field' }, [ qLabel(19, 'What kind of injury:'), injuryKindSel, injuryOther ])
   ]);
 
   var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
@@ -2382,7 +2406,7 @@ function openIncidentModal(opts){
       el('div', { 'class': 'field' }, [ qLabel(6, 'Time that this incident started'),
         el('input', { 'class': 'inp', type: 'time', value: f.incident_time, onchange: function(e){ f.incident_time = e.target.value; } }) ])
     ]),
-    multiQ(7, 'What type of incident is this', 'incident_types', INCIDENT_TYPES),
+    multiQ(7, 'What type of incident is this', 'incident_types', INCIDENT_TYPES, 'incident_type_other'),
     fallBlock(),
     choiceQ(8, 'Was there any unauthorised use of restricted practice', 'restrictive', ['No', Q8_YES], function(){
       secRestrictive.style.display = f.restrictive === 'No' ? 'none' : '';
@@ -2395,7 +2419,7 @@ function openIncidentModal(opts){
       secProperty.style.display = f.property_damage === 'No' ? 'none' : '';
     }),
     secProperty,
-    multiQ(16, 'Were emergency services called at all during this incident?', 'emergency', EMERGENCY),
+    multiQ(16, 'Were emergency services called at all during this incident?', 'emergency', EMERGENCY, 'emergency_other'),
     choiceQ(17, 'Were there any injuries?', 'injuries', ['No', Q17_YES], function(){
       secInjury.style.display = f.injuries === 'No' ? 'none' : '';
     }),
@@ -2414,12 +2438,18 @@ function openIncidentModal(opts){
     if (!f.incident_types.length) return fail('Q7 — tick at least one incident type.');
     if (f.is_fall === '') return fail('Fall details — say whether this incident involved a fall (Yes or No).');
     if (f.is_fall === 'Yes' && !f.fall_location) return fail('Fall details — choose where the fall happened.');
+    if (f.is_fall === 'Yes' && f.fall_location === 'Other' && !f.fall_location_other.trim()) return fail('Fall details — say where it was.');
+    if (f.is_fall === 'Yes' && f.during_transfer === '') return fail('Fall details — say whether it happened during a transfer.');
     if (f.is_fall === 'Yes' && f.second_person_needed === '') return fail('Fall details — say whether a second person was needed to get the participant up.');
     if (f.is_fall === 'Yes' && f.equipment_involved === '') return fail('Fall details — say whether equipment was involved.');
+    if (f.incident_types.indexOf('Other') >= 0 && !f.incident_type_other.trim()) return fail('Q7 — say what the other incident type was.');
     if (f.restrictive !== 'No' && !f.restrictive_types.length) return fail('Q9 — tick the type(s) of restrictive practice.');
+    if (f.restrictive !== 'No' && f.restrictive_types.indexOf('Other') >= 0 && !f.restrictive_other.trim()) return fail('Q9 — say what the other restrictive practice was.');
+    if (f.emergency.indexOf('Other') >= 0 && !f.emergency_other.trim()) return fail('Q16 — say which other service was called.');
     if (f.property_damage !== 'No' && !f.property_info.trim()) return fail('Q14 — describe the property damage.');
     if (f.injuries !== 'No' && !f.injury_who.trim()) return fail('Q18 — say who was injured and how.');
     if (f.injuries !== 'No' && !f.injury_kind) return fail('Q19 — choose the kind of injury.');
+    if (f.injuries !== 'No' && f.injury_kind === 'Other' && !f.injury_kind_other.trim()) return fail('Q19 — say what kind of injury it was.');
     errBox.style.display = 'none';
     busyBtn(saveBtn, true);
     var prefix = 'incidents/' + (ir ? ir.id : randId());
@@ -2429,18 +2459,24 @@ function openIncidentModal(opts){
         ticket_name: f.ticket_name, ticket_desc: f.ticket_desc,
         incident_date: f.incident_date || null, incident_time: f.incident_time || null,
         incident_types: f.incident_types,
+        incident_type_other: f.incident_types.indexOf('Other') >= 0 ? f.incident_type_other : '',
         restrictive: f.restrictive,
         restrictive_types: f.restrictive === 'No' ? [] : f.restrictive_types,
+        restrictive_other: (f.restrictive !== 'No' && f.restrictive_types.indexOf('Other') >= 0) ? f.restrictive_other : '',
         triggers: f.triggers, response: f.response, outcome: f.outcome,
         property_damage: f.property_damage,
         property_info: f.property_damage === 'No' ? '' : f.property_info,
         property_photos: existingPhotos.concat(metas),
         emergency: f.emergency,
+        emergency_other: f.emergency.indexOf('Other') >= 0 ? f.emergency_other : '',
         injuries: f.injuries,
         injury_who: f.injuries === 'No' ? '' : f.injury_who,
         injury_kind: f.injuries === 'No' ? '' : f.injury_kind,
+        injury_kind_other: (f.injuries !== 'No' && f.injury_kind === 'Other') ? f.injury_kind_other : '',
         is_fall: f.is_fall === 'Yes',
         fall_location: f.is_fall === 'Yes' ? f.fall_location : '',
+        fall_location_other: (f.is_fall === 'Yes' && f.fall_location === 'Other') ? f.fall_location_other : '',
+        during_transfer: f.is_fall === 'Yes' ? (f.during_transfer === 'Yes') : null,
         second_person_needed: f.is_fall === 'Yes' && f.second_person_needed === 'Yes',
         minutes_on_floor: f.is_fall === 'Yes' && f.minutes_on_floor !== '' ? parseInt(f.minutes_on_floor, 10) : null,
         equipment_involved: f.is_fall === 'Yes' && f.equipment_involved === 'Yes',
@@ -4307,7 +4343,13 @@ window.addEventListener('resize', (function(){
 /* ================= evidence logs: near miss, personal care log, overnight summary ================= */
 /* These quick structured forms feed the admin Reports tab. Nothing is parsed out of
    the free-text notes — every number on a report comes from a field a worker filled. */
-var NM_LOCATIONS = ['Bed', 'Shower', 'Toilet', 'Couch to wheelchair', 'Wheelchair to bed', 'Vehicle', 'Community', 'Other'];
+/* Where it happened. Places, not transfer types — whether a transfer was happening is asked
+   separately (during_transfer), because a transfer can happen anywhere. The two old
+   "X to Y" values are kept so records saved before 2026-09-09 still round-trip in the picker. */
+var NM_LOCATIONS = ['Bed', 'Bedroom', 'Bathroom', 'Shower', 'Toilet', 'Lounge or living room',
+  'Kitchen', 'Dining area', 'Hallway or doorway', 'Backyard or outside', 'Ramp or steps',
+  'Vehicle', 'Community', 'Couch to wheelchair', 'Wheelchair to bed', 'Other'];
+/* legacy only: used to guess "transfer-related" for rows saved before during_transfer existed */
 var TRANSFER_LOCS = ['Bed', 'Shower', 'Toilet', 'Couch to wheelchair', 'Wheelchair to bed', 'Vehicle'];
 
 /* small form helpers shared by the three modals */
@@ -4371,6 +4413,8 @@ function openNearMissModal(opts){
     nm_date: nm ? (nm.nm_date || '') : (shift ? shift.date : todayYmd()),
     nm_time: nm ? (nm.nm_time || '') : '',
     location: nm ? nm.location : '',
+    location_other: nm ? (nm.location_other || '') : '',
+    during_transfer: nm ? (nm.during_transfer == null ? '' : (nm.during_transfer ? 'Yes' : 'No')) : '',
     description: nm ? nm.description : '',
     prevented_by: nm ? nm.prevented_by : '',
     single_worker_capacity: nm ? (nm.single_worker_capacity ? 'Yes' : 'No') : 'No',
@@ -4378,18 +4422,24 @@ function openNearMissModal(opts){
     equipment_desc: nm ? (nm.equipment_desc || '') : ''
   };
   var eqDet = el('div', { style: f.equipment_factor === 'No' ? 'display:none' : '' }, evText(f, 'equipment_desc', 'Which equipment, and how it contributed'));
-  var locSel = el('select', { 'class': 'sel', onchange: function(e){ f.location = e.target.value; } },
+  var locOther = el('div', { style: f.location === 'Other' ? '' : 'display:none' },
+    evText(f, 'location_other', 'Say where it was'));
+  var locSel = el('select', { 'class': 'sel', onchange: function(e){ f.location = e.target.value; locOther.style.display = f.location === 'Other' ? '' : 'none'; } },
     [el('option', { value: '' }, 'Choose…')].concat(NM_LOCATIONS.map(function(l){ return el('option', { value: l, selected: f.location === l }, l); })));
   var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
   var saveBtn = el('button', { 'class': 'btn btn-pri', onclick: save }, editing ? 'Save changes' : 'Submit near miss');
   function fail(msg){ errBox.style.display = 'block'; errBox.textContent = msg; busyBtn(saveBtn, false); }
   function save(){
     if (!f.location) return fail('Choose where it happened.');
+    if (f.location === 'Other' && !f.location_other.trim()) return fail('Say where it was.');
+    if (f.during_transfer === '') return fail('Say whether it happened during a transfer.');
     if (!f.description.trim()) return fail('Describe what nearly happened.');
     errBox.style.display = 'none';
     busyBtn(saveBtn, true);
     var rec = {
       staff_name: f.staff_name, nm_date: f.nm_date || null, nm_time: f.nm_time || '', location: f.location,
+      location_other: f.location === 'Other' ? f.location_other : '',
+      during_transfer: f.during_transfer === 'Yes',
       description: f.description, prevented_by: f.prevented_by,
       single_worker_capacity: f.single_worker_capacity === 'Yes',
       equipment_factor: f.equipment_factor === 'Yes',
@@ -4419,6 +4469,9 @@ function openNearMissModal(opts){
       el('div', { 'class': 'field' }, [ evLabel('Approximate time'), el('input', { 'class': 'inp', type: 'time', value: f.nm_time, onchange: function(e){ f.nm_time = e.target.value; } }) ])
     ]),
     el('div', { 'class': 'field' }, [ evLabel('Where did it happen'), locSel ]),
+    locOther,
+    evYesNo(f, 'during_transfer', 'Did it happen during a transfer?'),
+    el('div', { 'class': 'q-help', style: 'margin:-6px 0 12px' }, 'A transfer is any move you assisted — bed, chair, toilet, shower, car, anywhere.'),
     evText(f, 'description', 'What nearly happened', 'e.g. Tim slipped forward during the couch to wheelchair transfer and started to go down.', true),
     evText(f, 'prevented_by', 'What stopped it becoming a fall', 'e.g. The worker braced him against the wheelchair and lowered him back onto the couch.', true),
     evYesNo(f, 'single_worker_capacity', 'Was this at or beyond what one worker can safely manage alone?'),
@@ -4737,6 +4790,7 @@ function avgTimeLabel(times){
 var EV_CALC_VERSION = 'metrics-v2';
 var EV_SLEEP_BLOCK = { from: '23:00', to: '07:00', hours: 8 };
 var EV_SLEEPOVER_INCLUDED_HOURS = 2;   // NDIS PAPL: up to 2 h of active support inside an 8 h sleepover
+/* legacy fallback only: rows saved before during_transfer existed are judged by location */
 var EV_TRANSFER_LOCS = ['Bed', 'Shower', 'Toilet', 'Couch to wheelchair', 'Wheelchair to bed', 'Vehicle'];
 var EV_BLANK_ZERO_CUTOFF = '2026-09-07';  // rows created before this stored blank answers as 0
 
@@ -4750,7 +4804,7 @@ var EV_METHOD = [
   ['One event, counted once', 'An event described in a note, an incident report and an uploaded document counts once. The structured record is the counted instance; reviewed observations that duplicate it are linked and excluded from totals. Uncertain duplicates are flagged for a person to decide.'],
   ['Excluded material', 'Sources marked excluded (training samples, generated examples, demonstrations) and observations still proposed or rejected never enter any figure.'],
   ['The 2-hour line', 'The NDIS Pricing Arrangements and Price Limits provide for up to 2 hours of active support inside an 8-hour sleepover; support beyond that is claimable separately (NDIS Quality and Safeguards Commission, “Sleepover shifts”, worker alert dated August 2026). The line is drawn against direct worker assistance only. Crossing it is a pricing fact, not an eligibility finding.'],
-  ['Transfers', 'A fall or near miss is transfer-related only when its recorded location names a transfer. Being in bed, a bathroom or a vehicle does not by itself establish that a transfer was happening.'],
+  ['Transfers', 'Transfer-related means the worker answered yes to "did it happen during a transfer". A transfer can happen anywhere, so the place it was recorded in does not decide this. Records saved before that question existed (before 9 September 2026) are counted only when the recorded location itself names a transfer, which understates rather than overstates them.'],
   ['Staffing', 'Four facts are kept apart: two workers actually assisted; one worker reported difficulty; a clinician recommended two; the provider is requesting two. Nothing here infers a staffing requirement from a fall, weight, an emergency recovery or a neighbour helping.']
 ];
 
@@ -4816,15 +4870,22 @@ function evBuildDataset(inp){
   var emerg = incs.filter(function(i){ return (i.emergency || []).some(function(x){ return x && x !== 'No'; }); });
   var injuries = incs.filter(function(i){ return i.injuries && i.injuries !== 'No'; });
   var equip = incs.filter(function(i){ return i.equipment_involved || (i.incident_types || []).indexOf('Equipment failure') >= 0; }).length + nms.filter(function(n){ return n.equipment_factor; }).length;
-  function transferRelated(loc){ return EV_TRANSFER_LOCS.indexOf(loc) >= 0; }
-  var transferEvents = falls.filter(function(i){ return transferRelated(i.fall_location); }).length + nms.filter(function(n){ return transferRelated(n.location); }).length;
+  /* a transfer can happen anywhere, so the worker is asked outright. during_transfer true/false is
+     the answer; null means the row predates the question and we fall back to the old location test. */
+  function transferRelated(rec, loc){
+    if (rec && rec.during_transfer === true) return true;
+    if (rec && rec.during_transfer === false) return false;
+    return EV_TRANSFER_LOCS.indexOf(loc) >= 0;
+  }
+  var transferEvents = falls.filter(function(i){ return transferRelated(i, i.fall_location); }).length + nms.filter(function(n){ return transferRelated(n, n.location); }).length;
   var weeks = []; for (var w = evMondayOf(from); w <= to; w = evAddDays(w, 7)) weeks.push(w);
   var weekly = weeks.map(function(w0){
     return { week: w0, falls: falls.filter(function(i){ return evMondayOf(i.incident_date) === w0; }).length, nearMisses: nms.filter(function(n){ return evMondayOf(n.nm_date) === w0; }).length };
   });
   var loc = {};
-  falls.forEach(function(i){ var k = i.fall_location || 'Not recorded'; loc[k] = loc[k] || { falls: 0, nearMisses: 0 }; loc[k].falls++; });
-  nms.forEach(function(n){ var k = n.location || 'Not recorded'; loc[k] = loc[k] || { falls: 0, nearMisses: 0 }; loc[k].nearMisses++; });
+  function locName(rec, base){ return (base === 'Other' && rec.location_other) ? rec.location_other : (base === 'Other' && rec.fall_location_other) ? rec.fall_location_other : base; }
+  falls.forEach(function(i){ var k = locName(i, i.fall_location) || 'Not recorded'; loc[k] = loc[k] || { falls: 0, nearMisses: 0, transfer: false }; loc[k].falls++; if (transferRelated(i, i.fall_location)) loc[k].transfer = true; });
+  nms.forEach(function(n){ var k = locName(n, n.location) || 'Not recorded'; loc[k] = loc[k] || { falls: 0, nearMisses: 0, transfer: false }; loc[k].nearMisses++; if (transferRelated(n, n.location)) loc[k].transfer = true; });
   var safety = {
     falls: falls.length, nearMisses: nms.length, secondPerson: secondPerson.length,
     floorMinutes: evSum(floorRecorded.map(function(i){ return i.minutes_on_floor; })), floorRecorded: floorRecorded.length,
@@ -4832,7 +4893,7 @@ function evBuildDataset(inp){
     injuries: injuries.length, equipment: equip, transferRelated: transferEvents, events: falls.length + nms.length,
     nmBeyondCapacity: nms.filter(function(n){ return n.single_worker_capacity; }).length,
     weekly: weekly,
-    locations: Object.keys(loc).map(function(k){ return { location: k, falls: loc[k].falls, nearMisses: loc[k].nearMisses, transfer: transferRelated(k) }; }).sort(function(a, b){ return (b.falls + b.nearMisses) - (a.falls + a.nearMisses); })
+    locations: Object.keys(loc).map(function(k){ return { location: k, falls: loc[k].falls, nearMisses: loc[k].nearMisses, transfer: loc[k].transfer }; }).sort(function(a, b){ return (b.falls + b.nearMisses) - (a.falls + a.nearMisses); })
   };
 
   /* ---- overnight: one row per ROSTERED night ---- */
@@ -5094,7 +5155,7 @@ function sumFindings(ds){
   out.push('Records exist for ' + sumPct(cov.shiftsWithNote, cov.shiftsRostered) + ' of rostered shifts (shift note) and ' + sumPct(cov.nightsWithSummary, cov.nightsRostered) + ' of rostered nights (overnight summary). Rostered shifts without a record are shown as not documented, not as no support.');
   if (o.documented) out.push('On the ' + o.documented + ' documented night' + (o.documented === 1 ? '' : 's') + ', direct worker assistance inside 11 pm to 7 am averaged ' + sumH(o.avgActive) + '; ' + o.nightsOver + ' of ' + o.documented + ' exceeded the 2 hours included in the sleepover price, by ' + sumH(o.hoursOver) + ' in total.');
   else out.push('No night in the period has a complete overnight summary, so no overnight figure is reported.');
-  out.push(s.falls + ' fall' + (s.falls === 1 ? '' : 's') + ' and ' + s.nearMisses + ' near miss' + (s.nearMisses === 1 ? '' : 'es') + ' were recorded' + (s.events ? '; ' + s.transferRelated + ' of ' + s.events + ' at a recorded transfer location; ' + s.secondPerson + ' fall' + (s.secondPerson === 1 ? '' : 's') + ' where a second person was needed to get up; ' + s.emergencyCalls + ' emergency call' + (s.emergencyCalls === 1 ? '' : 's') : '') + '.');
+  out.push(s.falls + ' fall' + (s.falls === 1 ? '' : 's') + ' and ' + s.nearMisses + ' near miss' + (s.nearMisses === 1 ? '' : 'es') + ' were recorded' + (s.events ? '; ' + s.transferRelated + ' of ' + s.events + ' recorded as happening during a transfer; ' + s.secondPerson + ' fall' + (s.secondPerson === 1 ? '' : 's') + ' where a second person was needed to get up; ' + s.emergencyCalls + ' emergency call' + (s.emergencyCalls === 1 ? '' : 's') : '') + '.');
   if (d.careLogs) out.push('Personal care logs cover ' + d.careDays + ' day' + (d.careDays === 1 ? '' : 's') + ': ' + d.measures[5].total + ' assisted transfers recorded (' + d.measures[5].recorded + ' of ' + d.careLogs + ' logs answered), ' + d.measures[6].total + ' recorded as not safely manageable by one worker.');
   else out.push('No personal care logs in the period, so no daytime load figures are reported.');
   return out;
@@ -5745,7 +5806,8 @@ function exportIncident(ir){
     ['Fall details: did this incident involve a fall?', yn(ir.is_fall)]
   ];
   if (ir.is_fall) rows.push(
-    ['Where did the fall happen', ir.fall_location],
+    ['Where did the fall happen', ir.fall_location === 'Other' && ir.fall_location_other ? 'Other — ' + ir.fall_location_other : ir.fall_location],
+    ['Happened during a transfer', ir.during_transfer == null ? 'Not recorded' : yn(ir.during_transfer)],
     ['Was a second person needed to get the participant up?', yn(ir.second_person_needed)],
     ['Minutes on the floor before being helped up', ir.minutes_on_floor != null ? ir.minutes_on_floor : 'Not recorded'],
     ['Was equipment involved?', yn(ir.equipment_involved) + (ir.equipment_involved && ir.equipment_desc ? '. ' + ir.equipment_desc : '')]
@@ -5773,7 +5835,9 @@ function exportNearMiss(nm){
     el('div', { 'class': 'xp-rec-h' }, 'Near miss · ' + (nm.location || '') + (nm.nm_time ? ' · ' + fmtTime(nm.nm_time) : ''))
   ]);
   [['Recorded by', nm.staff_name], ['Date', nm.nm_date ? fmtDateFull(nm.nm_date) : ''], ['Approximate time', nm.nm_time ? fmtTime(nm.nm_time) : ''],
-   ['Where it happened', nm.location], ['What nearly happened', nm.description], ['What stopped it becoming a fall', nm.prevented_by],
+   ['Where it happened', nm.location === 'Other' && nm.location_other ? 'Other — ' + nm.location_other : nm.location],
+   ['Happened during a transfer', nm.during_transfer == null ? 'Not recorded' : yn(nm.during_transfer)],
+   ['What nearly happened', nm.description], ['What stopped it becoming a fall', nm.prevented_by],
    ['At or beyond what one worker can safely manage alone', yn(nm.single_worker_capacity)],
    ['Equipment contributed', yn(nm.equipment_factor) + (nm.equipment_factor && nm.equipment_desc ? '. ' + nm.equipment_desc : '')]
   ].forEach(function(r){ box.appendChild(xpRow(r[0], r[1])); });

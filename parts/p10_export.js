@@ -137,7 +137,8 @@ function exportIncident(ir){
     ['Fall details: did this incident involve a fall?', yn(ir.is_fall)]
   ];
   if (ir.is_fall) rows.push(
-    ['Where did the fall happen', ir.fall_location],
+    ['Where did the fall happen', ir.fall_location === 'Other' && ir.fall_location_other ? 'Other — ' + ir.fall_location_other : ir.fall_location],
+    ['Happened during a transfer', ir.during_transfer == null ? 'Not recorded' : yn(ir.during_transfer)],
     ['Was a second person needed to get the participant up?', yn(ir.second_person_needed)],
     ['Minutes on the floor before being helped up', ir.minutes_on_floor != null ? ir.minutes_on_floor : 'Not recorded'],
     ['Was equipment involved?', yn(ir.equipment_involved) + (ir.equipment_involved && ir.equipment_desc ? '. ' + ir.equipment_desc : '')]
@@ -165,7 +166,9 @@ function exportNearMiss(nm){
     el('div', { 'class': 'xp-rec-h' }, 'Near miss · ' + (nm.location || '') + (nm.nm_time ? ' · ' + fmtTime(nm.nm_time) : ''))
   ]);
   [['Recorded by', nm.staff_name], ['Date', nm.nm_date ? fmtDateFull(nm.nm_date) : ''], ['Approximate time', nm.nm_time ? fmtTime(nm.nm_time) : ''],
-   ['Where it happened', nm.location], ['What nearly happened', nm.description], ['What stopped it becoming a fall', nm.prevented_by],
+   ['Where it happened', nm.location === 'Other' && nm.location_other ? 'Other — ' + nm.location_other : nm.location],
+   ['Happened during a transfer', nm.during_transfer == null ? 'Not recorded' : yn(nm.during_transfer)],
+   ['What nearly happened', nm.description], ['What stopped it becoming a fall', nm.prevented_by],
    ['At or beyond what one worker can safely manage alone', yn(nm.single_worker_capacity)],
    ['Equipment contributed', yn(nm.equipment_factor) + (nm.equipment_factor && nm.equipment_desc ? '. ' + nm.equipment_desc : '')]
   ].forEach(function(r){ box.appendChild(xpRow(r[0], r[1])); });
