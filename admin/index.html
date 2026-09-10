@@ -552,7 +552,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260909143132';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260910220045';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -4631,7 +4631,7 @@ function openOvernightModal(opts){
   var remain = el('div', { 'class': 'q-help', style: 'margin:-4px 0 12px' });
   function updRemain(){
     var a = evNumVal(f.asleep_hours), x = evNumVal(f.active_hours), r = Math.round((8 - a - x) * 100) / 100;
-    remain.textContent = (a || x) ? ('Sleepover block is 8 hours: ' + hrsFmt(a) + ' h asleep + ' + hrsFmt(x) + ' h active support' + (r > 0.001 ? ' + ' + hrsFmt(r) + ' h awake without assistance' : '') + (r < -0.001 ? ' — that is more than 8 hours, please check.' : '')) : '';
+    remain.textContent = (a || x) ? ('Sleepover block is 8 hours: ' + hrsFmt(a) + ' h asleep + ' + hrsFmt(x) + ' h awake with support' + (r > 0.001 ? ' — ' + hrsFmt(r) + ' h is still unaccounted for, please check the two figures add to 8.' : '') + (r < -0.001 ? ' — that is more than 8 hours, please check.' : '')) : '';
   }
   var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
   var saveBtn = el('button', { 'class': 'btn btn-pri', onclick: save }, ex ? 'Save changes' : 'Save overnight summary');
@@ -4650,12 +4650,12 @@ function openOvernightModal(opts){
     p.then(function(){ closeModal(); toast('Overnight summary saved'); refresh(); })["catch"](function(e){ fail(e.message); });
   }
   var asleepIn = evNum(f, 'asleep_hours', 'Hours asleep (✓ blocks × 15 min)', null, { step: '0.25' });
-  var activeIn = evNum(f, 'active_hours', 'Hours of active support (X blocks × 15 min)', null, { step: '0.25' });
+  var activeIn = evNum(f, 'active_hours', 'Hours awake, with support (X blocks × 15 min)', null, { step: '0.25' });
   asleepIn.querySelector('input').addEventListener('input', updRemain);
   activeIn.querySelector('input').addEventListener('input', updRemain);
   updRemain();
   var body = el('div', { 'class': 'modal-body' }, [
-    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Copy these from the paper sleep log for the 11:00pm to 7:00am block. "Active support" means the intervals you were assisting ' + who + ' (X blocks) — not time ' + who + ' was awake without needing you.'),
+    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Copy these from the paper sleep log for the 11:00pm to 7:00am block. Whenever ' + who + ' is awake overnight you are awake with him and supporting him, so his time awake IS support time — count every X block he was awake, not only the ones where you were hands-on. The two figures should add up to the full 8 hours.'),
     el('div', { 'class': 'grid2' }, [
       el('div', { 'class': 'field' }, [ evLabel('Went to bed at'), el('input', { 'class': 'inp', type: 'time', value: f.bed_time, onchange: function(e){ f.bed_time = e.target.value; } }) ]),
       el('div', { 'class': 'field' }, [ evLabel('Up for the day at'), el('input', { 'class': 'inp', type: 'time', value: f.wake_time, onchange: function(e){ f.wake_time = e.target.value; } }) ])
@@ -5007,6 +5007,9 @@ function evBuildDataset(inp){
     return { shiftId: s.id, date: s.date, endDate: evAddDays(s.date, 1), status: status, blockHours: block,
       asleep: asleep, assistHours: assistHours, assistBasis: active != null ? 'summary' : (withDur.length ? 'observations' : null),
       observed: { episodes: episodes, withDuration: withDur.length, hours: withDur.length ? evRound(observedMin / 60) : null },
+      /* House rule (owner, 2026-09-10): whenever the participant is awake overnight a worker is awake
+         with him and supporting him, so awake time IS support time. Anything left over is not a care
+         category, it is an unaccounted gap in the two figures and should be zero. */
       awakeNoAssist: (asleep != null && active != null) ? evRound(Math.max(0, block - asleep - active)) : null,
       wakes: l ? evNum(l.wakes) : null, bed: l ? (l.bed_time || null) : null, up: l ? (l.wake_time || null) : null,
       preNullZero: !!(l && evIsPreNullRow(l) && l.wakes === 0), worker_id: s.worker_id, summaryId: l ? l.id : null, obsIds: mine.map(function(o){ return o.id; }) };
@@ -5456,7 +5459,7 @@ function sumNightBars(ds, height){
   return anBars(rows.map(function(r){ return { label: fmtDM(r.date), value: r.assistHours, status: r.status, title: 'Night of ' + anFmtNight(r) + ': ' + (r.assistHours == null ? anStatusWord(r.status) : hrsFmt(r.assistHours) + ' h recorded assistance' + (r.status === 'partial' ? ' (partial)' : '')), onSelect: function(){ anNightRecords(r); } }; }), { unit: 'h', height: height || 190, aria: 'Recorded overnight assistance per night', fmt: function(v){ return hrsFmt(v); } });
 }
 function sumNightTable(ds){
-  return rpTable([ 'Night', 'Record', { t: 'Assistance', n: true }, { t: 'Asleep', n: true }, { t: 'Awake, no assist.', n: true }, { t: 'Wakes*', n: true }, { t: 'Episodes', n: true }, '' ], ds.overnight.rows.filter(function(r){ return r.status !== 'future'; }).map(function(r){
+  return rpTable([ 'Night', 'Record', { t: 'Assistance', n: true }, { t: 'Asleep', n: true }, { t: 'Unaccounted', n: true }, { t: 'Wakes*', n: true }, { t: 'Episodes', n: true }, '' ], ds.overnight.rows.filter(function(r){ return r.status !== 'future'; }).map(function(r){
     return [ anFmtNight(r), { t: anStatusWord(r.status) + (r.assistBasis === 'observations' ? ' (from intervals)' : ''), m: r.status !== 'complete' }, { t: r.assistHours == null ? '—' : hrsFmt(r.assistHours) + ' h', n: true }, { t: r.asleep == null ? '—' : hrsFmt(r.asleep) + ' h', n: true }, { t: r.awakeNoAssist == null ? '—' : hrsFmt(r.awakeNoAssist) + ' h', n: true }, { t: r.wakes == null ? '—' : String(r.wakes), n: true }, { t: r.observed.episodes ? String(r.observed.episodes) : '—', n: true }, el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ anNightRecords(r); } }, 'Details') ];
   }));
 }

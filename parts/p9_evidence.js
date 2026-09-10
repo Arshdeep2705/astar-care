@@ -252,7 +252,7 @@ function openOvernightModal(opts){
   var remain = el('div', { 'class': 'q-help', style: 'margin:-4px 0 12px' });
   function updRemain(){
     var a = evNumVal(f.asleep_hours), x = evNumVal(f.active_hours), r = Math.round((8 - a - x) * 100) / 100;
-    remain.textContent = (a || x) ? ('Sleepover block is 8 hours: ' + hrsFmt(a) + ' h asleep + ' + hrsFmt(x) + ' h active support' + (r > 0.001 ? ' + ' + hrsFmt(r) + ' h awake without assistance' : '') + (r < -0.001 ? ' — that is more than 8 hours, please check.' : '')) : '';
+    remain.textContent = (a || x) ? ('Sleepover block is 8 hours: ' + hrsFmt(a) + ' h asleep + ' + hrsFmt(x) + ' h awake with support' + (r > 0.001 ? ' — ' + hrsFmt(r) + ' h is still unaccounted for, please check the two figures add to 8.' : '') + (r < -0.001 ? ' — that is more than 8 hours, please check.' : '')) : '';
   }
   var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
   var saveBtn = el('button', { 'class': 'btn btn-pri', onclick: save }, ex ? 'Save changes' : 'Save overnight summary');
@@ -271,12 +271,12 @@ function openOvernightModal(opts){
     p.then(function(){ closeModal(); toast('Overnight summary saved'); refresh(); })["catch"](function(e){ fail(e.message); });
   }
   var asleepIn = evNum(f, 'asleep_hours', 'Hours asleep (✓ blocks × 15 min)', null, { step: '0.25' });
-  var activeIn = evNum(f, 'active_hours', 'Hours of active support (X blocks × 15 min)', null, { step: '0.25' });
+  var activeIn = evNum(f, 'active_hours', 'Hours awake, with support (X blocks × 15 min)', null, { step: '0.25' });
   asleepIn.querySelector('input').addEventListener('input', updRemain);
   activeIn.querySelector('input').addEventListener('input', updRemain);
   updRemain();
   var body = el('div', { 'class': 'modal-body' }, [
-    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Copy these from the paper sleep log for the 11:00pm to 7:00am block. "Active support" means the intervals you were assisting ' + who + ' (X blocks) — not time ' + who + ' was awake without needing you.'),
+    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Copy these from the paper sleep log for the 11:00pm to 7:00am block. Whenever ' + who + ' is awake overnight you are awake with him and supporting him, so his time awake IS support time — count every X block he was awake, not only the ones where you were hands-on. The two figures should add up to the full 8 hours.'),
     el('div', { 'class': 'grid2' }, [
       el('div', { 'class': 'field' }, [ evLabel('Went to bed at'), el('input', { 'class': 'inp', type: 'time', value: f.bed_time, onchange: function(e){ f.bed_time = e.target.value; } }) ]),
       el('div', { 'class': 'field' }, [ evLabel('Up for the day at'), el('input', { 'class': 'inp', type: 'time', value: f.wake_time, onchange: function(e){ f.wake_time = e.target.value; } }) ])

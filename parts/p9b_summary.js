@@ -253,7 +253,7 @@ function sumNightBars(ds, height){
   return anBars(rows.map(function(r){ return { label: fmtDM(r.date), value: r.assistHours, status: r.status, title: 'Night of ' + anFmtNight(r) + ': ' + (r.assistHours == null ? anStatusWord(r.status) : hrsFmt(r.assistHours) + ' h recorded assistance' + (r.status === 'partial' ? ' (partial)' : '')), onSelect: function(){ anNightRecords(r); } }; }), { unit: 'h', height: height || 190, aria: 'Recorded overnight assistance per night', fmt: function(v){ return hrsFmt(v); } });
 }
 function sumNightTable(ds){
-  return rpTable([ 'Night', 'Record', { t: 'Assistance', n: true }, { t: 'Asleep', n: true }, { t: 'Awake, no assist.', n: true }, { t: 'Wakes*', n: true }, { t: 'Episodes', n: true }, '' ], ds.overnight.rows.filter(function(r){ return r.status !== 'future'; }).map(function(r){
+  return rpTable([ 'Night', 'Record', { t: 'Assistance', n: true }, { t: 'Asleep', n: true }, { t: 'Unaccounted', n: true }, { t: 'Wakes*', n: true }, { t: 'Episodes', n: true }, '' ], ds.overnight.rows.filter(function(r){ return r.status !== 'future'; }).map(function(r){
     return [ anFmtNight(r), { t: anStatusWord(r.status) + (r.assistBasis === 'observations' ? ' (from intervals)' : ''), m: r.status !== 'complete' }, { t: r.assistHours == null ? '—' : hrsFmt(r.assistHours) + ' h', n: true }, { t: r.asleep == null ? '—' : hrsFmt(r.asleep) + ' h', n: true }, { t: r.awakeNoAssist == null ? '—' : hrsFmt(r.awakeNoAssist) + ' h', n: true }, { t: r.wakes == null ? '—' : String(r.wakes), n: true }, { t: r.observed.episodes ? String(r.observed.episodes) : '—', n: true }, el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ anNightRecords(r); } }, 'Details') ];
   }));
 }

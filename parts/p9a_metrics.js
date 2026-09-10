@@ -186,6 +186,9 @@ function evBuildDataset(inp){
     return { shiftId: s.id, date: s.date, endDate: evAddDays(s.date, 1), status: status, blockHours: block,
       asleep: asleep, assistHours: assistHours, assistBasis: active != null ? 'summary' : (withDur.length ? 'observations' : null),
       observed: { episodes: episodes, withDuration: withDur.length, hours: withDur.length ? evRound(observedMin / 60) : null },
+      /* House rule (owner, 2026-09-10): whenever the participant is awake overnight a worker is awake
+         with him and supporting him, so awake time IS support time. Anything left over is not a care
+         category, it is an unaccounted gap in the two figures and should be zero. */
       awakeNoAssist: (asleep != null && active != null) ? evRound(Math.max(0, block - asleep - active)) : null,
       wakes: l ? evNum(l.wakes) : null, bed: l ? (l.bed_time || null) : null, up: l ? (l.wake_time || null) : null,
       preNullZero: !!(l && evIsPreNullRow(l) && l.wakes === 0), worker_id: s.worker_id, summaryId: l ? l.id : null, obsIds: mine.map(function(o){ return o.id; }) };
