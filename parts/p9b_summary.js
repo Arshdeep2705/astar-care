@@ -214,7 +214,8 @@ function viewReports(main){
     el('div', { 'class': 'seg an-seg', role: 'group', 'aria-label': 'Preset periods' }, presets.map(function(p){ return el('button', { 'class': S.preset === p[0] ? 'on' : '', onclick: function(){ var y = addDays(todayYmd(), -1); sumSetPeriod(addDays(y, -p[2]), y, p[0]); } }, p[1]); })),
     el('div', { 'class': 'spacer' }),
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: sumOpenManage }, 'Manage data' + (S.ds && S.ds.coverage.records.observationsProposed ? ' (' + S.ds.coverage.records.observationsProposed + ')' : '')),
-    el('button', { 'class': 'btn btn-sm btn-pri', onclick: sumOpenExport }, [svgIcon(IC.file), 'Export'])
+    el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ var d = xpDefaults(); state.exp = Object.assign(state.exp || { type: 'notes', names: true, worker: '' }, { client: d.client, from: d.from, to: d.to }); openExportOptions(); } }, 'Export records'),
+    el('button', { 'class': 'btn btn-sm btn-pri', onclick: sumOpenExport }, [svgIcon(IC.file), 'Export summary'])
   ]));
   if (!S.data && !S.loading && !S.err) sumLoad();
   if (S.loading) { doc.appendChild(el('div', { 'class': 'an-cov', role: 'status' }, 'Loading every record for ' + (c ? c.name : '') + ', ' + fmtDate(S.from) + ' to ' + fmtDate(S.to) + '…')); return; }
@@ -645,7 +646,7 @@ function sumOpenExport(){
       el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Overview is always included. Add detail sections:'),
       [['overnight', 'Overnight'], ['incidents', 'Incidents'], ['near', 'Near misses'], ['appendix', 'Appendix: sources, record ids and definitions']].map(function(k){ return el('label', { 'class': 'checkrow' }, [ el('input', { type: 'checkbox', checked: !!o[k[0]], onchange: function(e){ o[k[0]] = e.target.checked; } }), el('span', { style: 'font-size:14px' }, k[1]) ]); }),
       el('div', { 'class': 'q-help', style: 'margin-top:10px' }, 'Opens the document; use Print / save as PDF. Record exports (full notes, incident forms, logs) are under Export records.'),
-      el('button', { 'class': 'btn btn-sm btn-ghost', style: 'margin-top:8px', onclick: function(){ closeModal(); openExportOptions(); } }, 'Export records instead…')
+      el('button', { 'class': 'btn btn-sm btn-ghost', style: 'margin-top:8px', onclick: function(){ closeModal(); var d = xpDefaults(); state.exp = Object.assign(state.exp || { type: 'notes', names: true, worker: '' }, { client: d.client, from: d.from, to: d.to }); openExportOptions(); } }, 'Export records instead…')
     ]),
     el('div', { 'class': 'modal-foot' }, [ el('div', { 'class': 'spacer' }), el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'), el('button', { 'class': 'btn btn-pri', onclick: function(){ closeModal(); state.adminTab = 'sumdoc'; render(); window.scrollTo(0, 0); } }, 'Open document') ])
   ]);
