@@ -657,7 +657,7 @@ function viewSumDoc(main){
   var legacy = ds.version !== EV_CALC_VERSION;
   main.appendChild(el('div', { 'class': 'rp-controls an-bar', style: 'margin:6px 0 12px' }, [
     el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ state.adminTab = 'reports'; render(); } }, [svgIcon(IC.left), 'Back to summary']),
-    el('button', { 'class': 'btn btn-pri btn-sm', onclick: function(){ window.print(); } }, [svgIcon(IC.file), 'Print / save as PDF']),
+    el('button', { 'class': 'btn btn-pri btn-sm', onclick: function(){ if (xpStandalone()) { toast('The installed app cannot print. Open the admin site in Safari or Chrome to print or save this summary.', true); return; } window.print(); } }, [svgIcon(IC.file), 'Print / save as PDF']),
     el('span', { 'class': 't-cap' }, ver ? 'Finalised version · ' + (ver.reviewer || '—') + ' · ' + fmtDT(ver.finalised_at || ver.created_at) : 'DRAFT — live data, not finalised')
   ]));
   var doc = el('div', { 'class': 'an-doc an-print' }); main.appendChild(doc);
