@@ -25,9 +25,7 @@ var EV_DEFINITIONS = [
   ['Counted once', 'A fall or near miss that appears in an incident report and again in a note or document is one event: the structured record is counted; the review links the repeat to it. Reviewed observations with no structured record are counted as their own event. Look-alikes on the same date within 30 minutes are listed for review, not merged.'],
   ['Overnight assistance duration', 'From the overnight summary: the X-coded 15-minute blocks of the paper sleep log inside 23:00–07:00 (elapsed time the worker was assisting). Where a night has no summary but has reviewed observations with start and end times, the merged elapsed time of those intervals is shown and the night is marked partial. Overlapping intervals are merged. Awake-without-assistance is shown only when the whole 23:00–07:00 window is accounted for (asleep + assistance recorded), and the window length is taken from the actual clock times, so a daylight-saving night is 7 or 9 hours, not 8.'],
   ['Wakes', 'The overnight summary’s wake count is the number of times the participant woke needing support BEFORE the wake they got up for the day. The final wake is not included. A wake is not the same as an assistance episode; one wake can involve several activities.'],
-  ['Assisted transfers', 'From the personal care log’s structured count. On a day with no care log, individually reviewed transfer observations are counted instead; the same day is never counted from both. Mentions of a wheelchair in prose are not transfers.'],
-  ['Care measures', 'Total and per-day are computed only over the logs that answered that measure; per-day divides by the number of days with that measure recorded. Logs saved before 7 September 2026 stored blank answers as 0 and are listed under checks.'],
-  ['Showers', '“Offered” is what the worker recorded. “Done” and “declined” are recorded answers; a shower recorded as offered with no completion answer is shown as “outcome not recorded”, not as declined.'],
+  ['Assisted transfers', 'Counted from transfer observations a reviewer accepted from shift notes and uploaded documents. The personal care log was retired on 17 September 2026. Mentions of a wheelchair in prose are not transfers.'],
   ['Incidents', 'Falls are incidents the worker recorded as a fall. “Involving an emergency call” counts incidents where any emergency service was recorded as called; the form does not record how many calls or whether the service attended. Injuries: the worker’s answer; no answer = unknown.'],
   ['Locations and activities', 'Location is where the record says it happened. Whether a transfer was in progress is the worker’s answer to that question; for records made before the question existed (before 9 September 2026) a transfer is inferred only when the recorded location itself names a transfer, and those rows are marked as inferred.'],
   ['Excluded material', 'Sources marked excluded (training samples, generated examples) and observations that are proposed or rejected never enter any figure. Demonstration mode uses an entirely synthetic participant.']
@@ -89,7 +87,6 @@ function evBuildDataset(inp){
   shifts.forEach(function(s){ s._scope = scope(s); });
   var incs = (inp.incidents || []).filter(function(i){ return i.participant_id === cid && inRange(i.incident_date); });
   var nms = (inp.nearMisses || []).filter(function(n){ return n.participant_id === cid && inRange(n.nm_date); });
-  var care = (inp.careLogs || []).filter(function(l){ return byId[l.shift_id]; });
   var onl = (inp.overnightLogs || []).filter(function(l){ return byId[l.shift_id]; });
   var notes = (inp.notes || []).filter(function(n){ return byId[n.shift_id] && n.note_type !== 'Mileage'; });
 
@@ -98,15 +95,14 @@ function evBuildDataset(inp){
   var nightsAll = shifts.filter(function(s){ return s.type === 'sleepover'; });
   var nightsInScope = nightsAll.filter(function(s){ return s._scope === 'completed'; });
   var noteIds = {}; notes.forEach(function(n){ noteIds[n.shift_id] = 1; });
-  var careIds = {}; care.forEach(function(l){ careIds[l.shift_id] = 1; });
   var onByShift = {}; onl.forEach(function(l){ onByShift[l.shift_id] = l; });
   var days = {}; shifts.forEach(function(s){ days[s.date] = 1; });
   var coverage = {
     periodDays: evDaysBetween(from, to) + 1, daysWithShifts: Object.keys(days).length,
     shifts: { rostered: shifts.length, completed: completed.length, inProgress: shifts.filter(function(s){ return s._scope === 'inProgress'; }).length, future: shifts.filter(function(s){ return s._scope === 'future'; }).length,
-      withNote: completed.filter(function(s){ return noteIds[s.id]; }).length, withCareLog: completed.filter(function(s){ return careIds[s.id]; }).length },
+      withNote: completed.filter(function(s){ return noteIds[s.id]; }).length },
     nights: { rostered: nightsAll.length, inScope: nightsInScope.length, inProgress: nightsAll.filter(function(s){ return s._scope === 'inProgress'; }).length, future: nightsAll.filter(function(s){ return s._scope === 'future'; }).length },
-    records: { incidents: incs.length, nearMisses: nms.length, careLogs: care.length, overnightLogs: onl.length, notes: notes.length,
+    records: { incidents: incs.length, nearMisses: nms.length, overnightLogs: onl.length, notes: notes.length,
       sources: (inp.sources || []).filter(function(s){ return s.participant_id === cid && !s.excluded; }).length,
       observationsAccepted: obs.length, observationsProposed: proposed.length,
       observationsLinked: allObs.filter(function(o){ return evIsLinked(o) && inRange(evNightOf(o)); }).length }
@@ -161,7 +157,7 @@ function evBuildDataset(inp){
   var nmDays = {}; nmList.forEach(function(e){ nmDays[e.date] = 1; });
   var nearMisses = {
     list: nmList, n: nmList.length, days: Object.keys(nmDays).length,
-    shiftsDocumented: completed.filter(function(s){ return noteIds[s.id] || careIds[s.id] || onByShift[s.id]; }).length,
+    shiftsDocumented: completed.filter(function(s){ return noteIds[s.id] || onByShift[s.id]; }).length,
     equipment: nmList.filter(function(e){ return e.equipment; }).length,
     transfers: { yes: nmList.filter(function(e){ return e.transfer === 'yes'; }).length, inferred: nmList.filter(function(e){ return e.transfer === 'inferred'; }).length, no: nmList.filter(function(e){ return e.transfer === 'no'; }).length, unknown: nmList.filter(function(e){ return e.transfer === 'unknown'; }).length },
     byLocation: countBy(nmList, function(e){ return [e.location || 'Not recorded']; }),
@@ -213,30 +209,11 @@ function evBuildDataset(inp){
       .sort(function(a, b){ return a.night === b.night ? ((evNightAxis(a.start) || 0) - (evNightAxis(b.start) || 0)) : (a.night < b.night ? -1 : 1); })
   };
 
-  /* ---- personal care ---- */
-  var careByDate = {}; care.forEach(function(l){ var d = byId[l.shift_id].date; (careByDate[d] = careByDate[d] || []).push(l); });
-  function measure(key, label){
-    var rec = care.filter(function(l){ return l[key] != null; });
-    var recDays = {}; rec.forEach(function(l){ recDays[byId[l.shift_id].date] = 1; });
-    var nd = Object.keys(recDays).length;
-    return { key: key, label: label, total: rec.length ? evSum(rec.map(function(l){ return +l[key]; })) : null, recorded: rec.length, of: care.length, days: nd, perDay: nd ? evRound(evSum(rec.map(function(l){ return +l[key]; })) / nd) : null, preNullZero: rec.filter(function(l){ return evIsPreNullRow(l) && l[key] === 0; }).length };
-  }
-  var showers = care.filter(function(l){ return l.shower_offered === true; });
+  /* ---- assisted transfers: reviewed observations only (the personal care log was retired 17 Sep 2026) ---- */
   var transferObs = obs.filter(function(o){ return o.category === 'daytime_task' && /transfer/i.test(o.assist_type || ''); });
-  var tMeasure = measure('transfers', 'Assisted transfers');
-  var transferDays = {}; care.filter(function(l){ return l.transfers != null; }).forEach(function(l){ transferDays[byId[l.shift_id].date] = 1; });
-  var obsOnlyDays = {}; transferObs.forEach(function(o){ if (!transferDays[o.obs_date]) obsOnlyDays[o.obs_date] = (obsOnlyDays[o.obs_date] || 0) + 1; });
-  var transfersFromObs = evSum(Object.keys(obsOnlyDays).map(function(d){ return obsOnlyDays[d]; }));
-  var careData = {
-    logs: care.length, days: Object.keys(careByDate).length,
-    measures: [ measure('pad_wet', 'Pad changes (wet)'), measure('pad_bowel', 'Pad changes (bowel)'), measure('bed_wet', 'Found wet in bed'), measure('bedding_changes', 'Bedding changes'), measure('care_refusals', 'Care refusals needing prompting') ],
-    transfers: { logged: tMeasure.total, loggedRecorded: tMeasure.recorded, loggedOf: tMeasure.of, loggedDays: tMeasure.days, perDay: tMeasure.perDay, fromObservations: transfersFromObs, observationDays: Object.keys(obsOnlyDays).length, observationEvents: transferObs.length,
-      total: (tMeasure.total == null && !transfersFromObs) ? null : (tMeasure.total || 0) + transfersFromObs },
-    showers: { offered: showers.length, done: showers.filter(function(l){ return l.shower_done === true; }).length, declined: showers.filter(function(l){ return l.shower_done === false && !evIsPreNullRow(l); }).length,
-      outcomeNotRecorded: showers.filter(function(l){ return l.shower_done == null || (l.shower_done === false && evIsPreNullRow(l)); }).length,
-      promptsAvg: (function(){ var a = showers.filter(function(l){ return l.shower_prompts != null; }).map(function(l){ return +l.shower_prompts; }); return a.length ? evRound(evAvg(a)) : null; })(), promptsN: showers.filter(function(l){ return l.shower_prompts != null; }).length },
-    dailyTransfers: Object.keys(careByDate).sort().map(function(d){ var v = careByDate[d].filter(function(l){ return l.transfers != null; }); return { date: d, transfers: v.length ? evSum(v.map(function(l){ return +l.transfers; })) : null, logs: careByDate[d].length }; })
-  };
+  var transferDays = {}; transferObs.forEach(function(o){ transferDays[o.obs_date] = (transferDays[o.obs_date] || 0) + 1; });
+  var transfersData = { events: transferObs.length, days: Object.keys(transferDays).length,
+    daily: Object.keys(transferDays).sort().map(function(d){ return { date: d, transfers: transferDays[d] }; }) };
 
   /* ---- time series: day buckets up to 35 days, else ISO weeks ---- */
   var bucketMode = coverage.periodDays <= 35 ? 'day' : 'week';
@@ -244,7 +221,7 @@ function evBuildDataset(inp){
   if (bucketMode === 'day') { for (var d = from; d <= to; d = evAddDays(d, 1)) keys.push(d); } else { for (var w = evMondayOf(from); w <= to; w = evAddDays(w, 7)) keys.push(w); }
   function bkey(date){ return bucketMode === 'day' ? date : evMondayOf(date); }
   var series = { mode: bucketMode, buckets: keys.map(function(k){
-    var tr = careData.dailyTransfers.filter(function(x){ return bkey(x.date) === k && x.transfers != null; });
+    var tr = transfersData.daily.filter(function(x){ return bkey(x.date) === k; });
     return { key: k, incidents: incidentList.filter(function(e){ return bkey(e.date) === k; }).length, falls: falls.filter(function(e){ return bkey(e.date) === k; }).length, nearMisses: nmList.filter(function(e){ return bkey(e.date) === k; }).length,
       transfers: tr.length ? evSum(tr.map(function(x){ return x.transfers; })) : null, transferDays: tr.length,
       shifts: completed.filter(function(s){ return bkey(s.date) === k; }).length, nights: inScopeRows.filter(function(r){ return bkey(r.date) === k; }).length, nightsLogged: inScopeRows.filter(function(r){ return bkey(r.date) === k && r.status !== 'missing'; }).length };
@@ -254,7 +231,7 @@ function evBuildDataset(inp){
   var metrics = {
     falls: { value: incidents.falls, unit: 'falls', of: incidents.n, note: incidents.n + ' incident report' + (incidents.n === 1 ? '' : 's') + ' in period' },
     nearMisses: { value: nearMisses.n, unit: 'near misses', note: nearMisses.days + ' day' + (nearMisses.days === 1 ? '' : 's') + ' with a record' },
-    transfers: { value: careData.transfers.total, unit: 'assisted transfers', note: careData.transfers.loggedRecorded + ' of ' + careData.transfers.loggedOf + ' care logs answered' + (careData.transfers.fromObservations ? ' + ' + careData.transfers.fromObservations + ' reviewed on ' + careData.transfers.observationDays + ' unlogged day' + (careData.transfers.observationDays === 1 ? '' : 's') : '') },
+    transfers: { value: transfersData.events ? transfersData.events : null, unit: 'assisted transfers', note: transfersData.events ? 'reviewed observations on ' + transfersData.days + ' day' + (transfersData.days === 1 ? '' : 's') : 'no reviewed transfer observations; the personal care log was retired 17 Sep 2026' },
     emergency: { value: incidents.emergencyInvolved, unit: 'incidents involving an emergency call', of: incidents.n, note: 'of ' + incidents.n + ' incident' + (incidents.n === 1 ? '' : 's') + '; attendance not recorded on the form' },
     overnightAvg: { value: overnight.avgAssist.hours, unit: 'h per night', note: overnight.avgAssist.n + ' of ' + overnight.avgAssist.of + ' nights in scope' + (overnight.avgAssist.n && overnight.avgAssist.fromSummary < overnight.avgAssist.n ? ' (' + (overnight.avgAssist.n - overnight.avgAssist.fromSummary) + ' from reviewed intervals)' : '') },
     nightsUsable: { value: overnight.inScope ? overnight.complete : null, unit: 'nights with complete data', of: overnight.inScope, note: overnight.partial + ' partial · ' + overnight.missing + ' not recorded' + (overnight.notYet ? ' · ' + overnight.notYet + ' not yet finished' : '') }
@@ -262,7 +239,6 @@ function evBuildDataset(inp){
 
   /* ---- checks for a reviewer ---- */
   var checks = [];
-  care.forEach(function(l){ if (evIsPreNullRow(l)) checks.push({ kind: 'pre-null zero', date: byId[l.shift_id].date, detail: 'Care log saved before 7 Sep 2026: a 0 may be an unanswered box.', ref: l.id }); });
   nightRows.forEach(function(r){
     if (r.preNullZero) checks.push({ kind: 'pre-null zero', date: r.date, detail: 'Overnight summary saved before 7 Sep 2026 with 0 wakes: may be an unanswered box.', ref: r.summaryId });
     if (r.status === 'complete' && r.wakes != null && r.observed.episodes && r.observed.episodes !== r.wakes) checks.push({ kind: 'reconcile', date: r.date, detail: 'Night of ' + r.date + ': summary records ' + r.wakes + ' wake' + (r.wakes === 1 ? '' : 's') + ' before the final wake; ' + r.observed.episodes + ' reviewed assistance episode' + (r.observed.episodes === 1 ? '' : 's') + ' (a wake can involve several episodes). Nothing was changed.', ref: r.shiftId });
@@ -282,8 +258,8 @@ function evBuildDataset(inp){
   var sourceIndex = (inp.sources || []).filter(function(s){ return s.participant_id === cid && !s.excluded; }).map(function(s, i){ return { n: i + 1, id: s.id, title: s.title || s.file_name || s.kind, kind: s.kind, author: s.author || '', from: s.event_from || '', to: s.event_to || '', sha256: s.sha256 || '', updated_at: s.updated_at || s.created_at || '' }; });
 
   return { version: EV_CALC_VERSION, builtAt: now.toISOString(), client: { id: cid, name: inp.client.name }, from: from, to: to, tz: inp.tz || 'Australia/Melbourne', sleepBlock: EV_SLEEP_BLOCK,
-    coverage: coverage, metrics: metrics, overnight: overnight, incidents: incidents, nearMisses: nearMisses, care: careData, series: series, checks: checks,
-    sourceIndex: sourceIndex, recordIds: { incidents: incs.map(function(i){ return i.id; }), nearMisses: nms.map(function(n){ return n.id; }), careLogs: care.map(function(l){ return l.id; }), overnightLogs: onl.map(function(l){ return l.id; }), observations: obs.map(function(o){ return o.id; }) },
+    coverage: coverage, metrics: metrics, overnight: overnight, incidents: incidents, nearMisses: nearMisses, transfers: transfersData, series: series, checks: checks,
+    sourceIndex: sourceIndex, recordIds: { incidents: incs.map(function(i){ return i.id; }), nearMisses: nms.map(function(n){ return n.id; }), overnightLogs: onl.map(function(l){ return l.id; }), observations: obs.map(function(o){ return o.id; }) },
     definitions: EV_DEFINITIONS };
 }
 
@@ -354,7 +330,7 @@ function evFindCandidates(text, ctx){
 function evDemoDataset(from, to){
   var c = { id: 'demo-participant', name: 'Demo Participant (synthetic)', address: '1 Example Street, Sampleville (synthetic)', colour: '#6B7280' };
   var seed = 7; function rnd(){ seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
-  var shifts = [], incidents = [], nearMisses = [], careLogs = [], overnightLogs = [], notes = [], sources = [], observations = [];
+  var shifts = [], incidents = [], nearMisses = [], overnightLogs = [], notes = [], sources = [], observations = [];
   var nowIso = to + 'T12:00:00';
   var n = 0;
   for (var d = from; d <= to; d = evAddDays(d, 1)) {
@@ -363,7 +339,6 @@ function evDemoDataset(from, to){
     var night = { id: 'demo-s-' + n + 'n', client_id: c.id, date: d, type: 'sleepover', start_t: '18:00', end_t: '09:00', worker_id: 'demo-w2', created_at: d + 'T00:00:00Z' };
     shifts.push(day, night);
     var r = rnd();
-    if (r > 0.25) careLogs.push({ id: 'demo-c-' + n, shift_id: day.id, participant_id: c.id, pad_wet: Math.floor(rnd() * 3) + 1, pad_bowel: rnd() > 0.5 ? 1 : 0, bed_wet: rnd() > 0.7 ? 1 : 0, bedding_changes: rnd() > 0.7 ? 1 : 0, shower_offered: true, shower_done: rnd() > 0.3 ? true : (rnd() > 0.5 ? false : null), shower_prompts: Math.floor(rnd() * 4), care_refusals: Math.floor(rnd() * 2), transfers: 6 + Math.floor(rnd() * 8), created_at: d + 'T18:30:00Z' });
     var r2 = rnd();
     if (r2 > 0.3) { var active = evRound(Math.floor(rnd() * 16) * 0.25); overnightLogs.push({ id: 'demo-o-' + n, shift_id: night.id, participant_id: c.id, bed_time: rnd() > 0.5 ? '20:30' : '21:15', wake_time: rnd() > 0.5 ? '03:30' : '05:45', wakes: Math.floor(rnd() * 3), asleep_hours: evRound(Math.max(0, 8 - active - Math.floor(rnd() * 4) * 0.25)), active_hours: active, created_at: evAddDays(d, 1) + 'T09:30:00Z' }); }
     else if (r2 > 0.15) overnightLogs.push({ id: 'demo-o-' + n, shift_id: night.id, participant_id: c.id, bed_time: '21:00', wake_time: null, wakes: null, asleep_hours: null, active_hours: null, created_at: evAddDays(d, 1) + 'T09:30:00Z' });
@@ -379,7 +354,7 @@ function evDemoDataset(from, to){
     { id: 'demo-ob-2', participant_id: c.id, source_id: 'demo-src-1', obs_date: evAddDays(nightForObs, 1), start_time: '03:30', end_time: '03:50', timing: 'estimated', category: 'overnight_assist', assist_type: 'Transfer', reason: 'Assisted to the toilet (as recorded)', outcome: '', status: 'accepted', source_ref: 'Sentence 3', reviewer: 'Demo reviewer', reviewed_at: to + 'T00:00:00Z' },
     { id: 'demo-ob-3', participant_id: c.id, source_id: 'demo-src-1', obs_date: evAddDays(nightForObs, 1), start_time: '03:35', timing: 'estimated', category: 'overnight_assist', assist_type: 'Continence / toileting', reason: 'repeat account', outcome: '', status: 'proposed', source_ref: 'Sentence 3 (again)' }
   );
-  return { client: c, now: nowIso, shifts: shifts, incidents: incidents, nearMisses: nearMisses, careLogs: careLogs, overnightLogs: overnightLogs, notes: notes, sources: sources, observations: observations, versions: [], workers: [{ id: 'demo-w1', name: 'Demo Worker A' }, { id: 'demo-w2', name: 'Demo Worker B' }] };
+  return { client: c, now: nowIso, shifts: shifts, incidents: incidents, nearMisses: nearMisses, overnightLogs: overnightLogs, notes: notes, sources: sources, observations: observations, versions: [], workers: [{ id: 'demo-w1', name: 'Demo Worker A' }, { id: 'demo-w2', name: 'Demo Worker B' }] };
 }
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { evBuildDataset: evBuildDataset, evMergeIntervals: evMergeIntervals, evExportModel: evExportModel, evFindCandidates: evFindCandidates, evDemoDataset: evDemoDataset, evSplitSegmentDate: evSplitSegmentDate, evMergeMinutes: evMergeMinutes, evNightOf: evNightOf, evBlockHours: evBlockHours, EV_CALC_VERSION: EV_CALC_VERSION, EV_DEFINITIONS: EV_DEFINITIONS };

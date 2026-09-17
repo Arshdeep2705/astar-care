@@ -1,4 +1,4 @@
-/* ================= evidence logs: near miss, personal care log, overnight summary ================= */
+/* ================= evidence logs: near miss, overnight summary (the personal care log was retired 17 Sep 2026) ================= */
 /* These quick structured forms feed the admin Reports tab. Nothing is parsed out of
    the free-text notes — every number on a report comes from a field a worker filled. */
 /* Where it happened. Places, not transfer types — whether a transfer was happening is asked
@@ -156,84 +156,6 @@ function openNearMissModal(opts){
       el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
       saveBtn
     ])
-  ]);
-  openModal(m);
-}
-
-/* ---------- personal care log (one per shift) ---------- */
-function openCareLogModal(opts){
-  var shift = opts.shift;
-  var worker = opts.worker || me();
-  var client = clientById(shift.client_id);
-  var ex = careLogForShift(shift.id);
-  var who = client ? firstName(client.name) : 'the participant';
-  function keep(v){ return v == null ? '' : v; }
-  var f = {
-    pad_wet: ex ? keep(ex.pad_wet) : '', pad_bowel: ex ? keep(ex.pad_bowel) : '', bed_wet: ex ? keep(ex.bed_wet) : '', bedding_changes: ex ? keep(ex.bedding_changes) : '',
-    shower_offered: ex ? (ex.shower_offered ? 'Yes' : 'No') : '',
-    shower_done: ex ? (ex.shower_done ? 'Yes' : 'No') : '',
-    shower_prompts: ex ? keep(ex.shower_prompts) : '',
-    care_refusals: ex ? keep(ex.care_refusals) : '', transfers: ex ? keep(ex.transfers) : '', transfer_unsafe_alone: ex ? keep(ex.transfer_unsafe_alone) : ''
-  };
-  var showerDet = el('div', { style: f.shower_offered === 'No' ? 'display:none' : '' }, [
-    evYesNo(f, 'shower_done', 'Was the shower done?'),
-    evNum(f, 'shower_prompts', 'How many prompts before ' + who + ' agreed to the shower', 'Count each time it was offered or ' + who + ' was encouraged before accepting. If the shower was declined altogether, enter the number of prompts made.')
-  ]);
-  var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
-  var saveBtn = el('button', { 'class': 'btn btn-pri', onclick: save }, ex ? 'Save changes' : 'Save care log');
-  function fail(msg){ errBox.style.display = 'block'; errBox.textContent = msg; busyBtn(saveBtn, false); }
-  function save(){
-    if (f.pad_wet === '' && f.pad_bowel === '' && f.transfers === '') return fail('Enter at least the pad changes and transfers for this shift. Type 0 if there were none; leave a box empty only if you did not observe it.');
-    if (f.shower_offered === '') return fail('Say whether a shower was offered this shift.');
-    if (f.shower_offered === 'Yes' && f.shower_done === '') return fail('Say whether the shower was done.');
-    errBox.style.display = 'none';
-    busyBtn(saveBtn, true);
-    var rec = {
-      pad_wet: evIntOrNull(f.pad_wet), pad_bowel: evIntOrNull(f.pad_bowel), bed_wet: evIntOrNull(f.bed_wet), bedding_changes: evIntOrNull(f.bedding_changes),
-      shower_offered: f.shower_offered === 'Yes', shower_done: f.shower_offered === 'Yes' && f.shower_done === 'Yes',
-      shower_prompts: f.shower_offered === 'Yes' ? evIntOrNull(f.shower_prompts) : null,
-      care_refusals: evIntOrNull(f.care_refusals), transfers: evIntOrNull(f.transfers), transfer_unsafe_alone: evIntOrNull(f.transfer_unsafe_alone),
-      updated_at: new Date().toISOString()
-    };
-    var zeroKeys = ['pad_wet','pad_bowel','bed_wet','bedding_changes','shower_prompts','care_refusals','transfers','transfer_unsafe_alone'];
-    var p;
-    if (ex) p = evSaveWithNullFallback(function(r){ return sbUpd('ac_care_logs', 'id=eq.' + ex.id, r); }, rec, zeroKeys);
-    else { rec.shift_id = shift.id; rec.participant_id = shift.client_id; rec.worker_id = worker ? worker.id : null; delete rec.updated_at; p = evSaveWithNullFallback(function(r){ return sbIns('ac_care_logs', [r]); }, rec, zeroKeys); }
-    p.then(function(){ closeModal(); toast('Care log saved'); refresh(); })["catch"](function(e){ fail(e.message); });
-  }
-  var body = el('div', { 'class': 'modal-body' }, [
-    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Numbers only, for this shift with ' + who + '. Type 0 when something did not happen. Leave a box empty only if you did not observe it — an empty box is recorded as "not recorded", not as 0.'),
-    el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Continence'),
-    el('div', { 'class': 'grid2' }, [
-      evNum(f, 'pad_wet', 'Pad changes (wet)'),
-      evNum(f, 'pad_bowel', 'Pad changes (bowel movement)')
-    ]),
-    el('div', { 'class': 'grid2' }, [
-      evNum(f, 'bed_wet', 'Times found wet in bed'),
-      evNum(f, 'bedding_changes', 'Bedding changes')
-    ]),
-    el('div', { 'class': 't-label', style: 'margin:6px 0 8px' }, 'Shower'),
-    evYesNo(f, 'shower_offered', 'Was a shower offered this shift?', function(){ showerDet.style.display = f.shower_offered === 'No' ? 'none' : ''; }),
-    showerDet,
-    el('div', { 'class': 't-label', style: 'margin:6px 0 8px' }, 'Refusals and manual handling'),
-    evNum(f, 'care_refusals', 'Other care refusals needing prompting', 'Times ' + who + ' declined personal care (pad change, clothing change, toileting) and had to be prompted before accepting.'),
-    el('div', { 'class': 'grid2' }, [
-      evNum(f, 'transfers', 'Assisted transfers this shift', 'Every couch, wheelchair, bed, toilet, shower chair and vehicle transfer.'),
-      evNum(f, 'transfer_unsafe_alone', 'Transfers one worker could not do safely alone', 'Times you needed a second person, or could only manage with real difficulty or risk.')
-    ]),
-    errBox
-  ]);
-  var m = el('div', { 'class': 'modal modal-wide' }, [
-    el('div', { 'class': 'sheet-grab' }),
-    el('div', { 'class': 'modal-head' }, [
-      el('div', null, [
-        el('div', { 'class': 't-title' }, 'Personal care log'),
-        el('div', { 'class': 't-cap' }, (client ? client.name : '') + ' · ' + fmtDate(shift.date) + ' · ' + fmtRange(shift.start_t, shift.end_t))
-      ]),
-      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
-    ]),
-    body,
-    el('div', { 'class': 'modal-foot' }, [ el('div', { 'class': 'spacer' }), el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'), saveBtn ])
   ]);
   openModal(m);
 }

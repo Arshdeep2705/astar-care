@@ -42,7 +42,7 @@ definitions are embedded in every export (appendix) and in the app as `EV_DEFINI
 |---|---|---|
 | Falls recorded | incidents with `is_fall`, plus accepted incident observations whose type is a fall | of incident reports in period |
 | Near misses recorded | near miss records + accepted near-miss observations | days with a record |
-| Assisted transfers recorded | sum of care-log `transfers` where answered; on a day with no care log, accepted daytime "Transfer" observations are counted instead (never both) | logs answered of logs; reviewed count on unlogged days |
+| Assisted transfers recorded | accepted daytime "Transfer" observations (reviewed from shift notes and uploaded documents). The structured personal care log was retired on 2026-09-17 (migration 006) and no longer feeds any figure | days with an accepted observation |
 | Incidents involving an emergency call | incidents where any emergency service was recorded as called | of incidents; the form records neither the number of calls nor attendance |
 | Average recorded overnight assistance | mean of per-night recorded assistance hours | nights with a value of nights in scope; how many came from reviewed intervals |
 | Nights with complete overnight data | nights with an overnight summary that has hours | of nights in scope; partial and not-recorded counts |
@@ -75,7 +75,7 @@ Counts, days with a record, equipment involvement and transfer state as recorded
 
 ## Personal care
 
-Totals and per-day are over the logs that answered the measure; per-day divides by days with that measure recorded. Showers: offered / done / declined / outcome not recorded (offered with no completion answer, or a pre-cutoff `false`).
+Retired 2026-09-17. Pad changes, showers and refusals are described in the shift note itself and are not counted as figures; the old `ac_care_logs` table is archived as `ac_care_logs_archive_20260917` with no API access (migration 006).
 
 ## Versions
 
