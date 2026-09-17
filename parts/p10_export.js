@@ -186,7 +186,6 @@ function xpIncidentModel(ir){
   var yn = function(v){ return v ? 'Yes' : 'No'; };
   var rows = [
     ['1. Name of the staff member filling in this form', ir.staff_name],
-    ['2. Which other staff member was on shift during this incident', ir.other_staff],
     ["3. Ticket Name (the Participant's name)", ir.ticket_name],
     ['4. Ticket Description', ir.ticket_desc],
     ['5. Date this incident happened', ir.incident_date ? fmtDateFull(ir.incident_date) : ''],
@@ -194,6 +193,7 @@ function xpIncidentModel(ir){
     ['7. What type of incident is this', (ir.incident_types || []).join(', ')],
     ['Fall details: did this incident involve a fall?', yn(ir.is_fall)]
   ];
+  if (ir.other_staff) rows.splice(1, 0, ['Recorded on this report (question retired 17 Sep 2026)', 'Other staff member on shift: ' + ir.other_staff]);
   if (ir.is_fall) rows.push(
     ['Where did the fall happen', ir.fall_location === 'Other' && ir.fall_location_other ? 'Other — ' + ir.fall_location_other : ir.fall_location],
     ['Happened during a transfer', ir.during_transfer == null ? 'Not recorded' : yn(ir.during_transfer)],

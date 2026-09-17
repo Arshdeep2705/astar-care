@@ -552,7 +552,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260917122428';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260917123023';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -2303,7 +2303,7 @@ function openIncidentModal(opts){
 
   var f = {
     staff_name: ir ? ir.staff_name : (worker ? worker.name : ''),
-    other_staff: ir ? ir.other_staff : '',
+    other_staff: ir ? ir.other_staff : '',   // retired question (17 Sep 2026, owner: supports are 1:1): historical value kept, never asked on new reports
     ticket_name: ir ? ir.ticket_name : (client ? client.name : ''),
     ticket_desc: ir ? ir.ticket_desc : '',
     incident_date: ir ? (ir.incident_date || '') : (shift ? shift.date : todayYmd()),
@@ -2449,7 +2449,7 @@ function openIncidentModal(opts){
 
   var body = el('div', { 'class': 'modal-body' }, [
     textQ(1, 'Name of the staff member filling in this form', 'staff_name'),
-    textQ(2, 'Which other staff member was on shift during this incident', 'other_staff'),
+    ir && ir.other_staff ? el('div', { 'class': 't-cap', style: 'margin:-4px 0 10px' }, 'Recorded on this report: other staff member on shift — ' + ir.other_staff + '. (This question is no longer asked on new reports.)') : null,
     textQ(3, 'Ticket Name', 'ticket_name', "'Ticket name' means the name of the Participant. Please put the Participant's name here:"),
     longQ(4, 'Ticket Description', 'ticket_desc', 'Ticket Description means a description of the incident. Please keep this brief as possible and include approximate times that things happened. Please do not copy and paste shift notes — just provide a brief description and answer the questions below.'),
     el('div', { 'class': 'grid2' }, [
@@ -6069,7 +6069,6 @@ function xpIncidentModel(ir){
   var yn = function(v){ return v ? 'Yes' : 'No'; };
   var rows = [
     ['1. Name of the staff member filling in this form', ir.staff_name],
-    ['2. Which other staff member was on shift during this incident', ir.other_staff],
     ["3. Ticket Name (the Participant's name)", ir.ticket_name],
     ['4. Ticket Description', ir.ticket_desc],
     ['5. Date this incident happened', ir.incident_date ? fmtDateFull(ir.incident_date) : ''],
@@ -6077,6 +6076,7 @@ function xpIncidentModel(ir){
     ['7. What type of incident is this', (ir.incident_types || []).join(', ')],
     ['Fall details: did this incident involve a fall?', yn(ir.is_fall)]
   ];
+  if (ir.other_staff) rows.splice(1, 0, ['Recorded on this report (question retired 17 Sep 2026)', 'Other staff member on shift: ' + ir.other_staff]);
   if (ir.is_fall) rows.push(
     ['Where did the fall happen', ir.fall_location === 'Other' && ir.fall_location_other ? 'Other — ' + ir.fall_location_other : ir.fall_location],
     ['Happened during a transfer', ir.during_transfer == null ? 'Not recorded' : yn(ir.during_transfer)],

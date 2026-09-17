@@ -252,7 +252,7 @@ function openIncidentModal(opts){
 
   var f = {
     staff_name: ir ? ir.staff_name : (worker ? worker.name : ''),
-    other_staff: ir ? ir.other_staff : '',
+    other_staff: ir ? ir.other_staff : '',   // retired question (17 Sep 2026, owner: supports are 1:1): historical value kept, never asked on new reports
     ticket_name: ir ? ir.ticket_name : (client ? client.name : ''),
     ticket_desc: ir ? ir.ticket_desc : '',
     incident_date: ir ? (ir.incident_date || '') : (shift ? shift.date : todayYmd()),
@@ -398,7 +398,7 @@ function openIncidentModal(opts){
 
   var body = el('div', { 'class': 'modal-body' }, [
     textQ(1, 'Name of the staff member filling in this form', 'staff_name'),
-    textQ(2, 'Which other staff member was on shift during this incident', 'other_staff'),
+    ir && ir.other_staff ? el('div', { 'class': 't-cap', style: 'margin:-4px 0 10px' }, 'Recorded on this report: other staff member on shift — ' + ir.other_staff + '. (This question is no longer asked on new reports.)') : null,
     textQ(3, 'Ticket Name', 'ticket_name', "'Ticket name' means the name of the Participant. Please put the Participant's name here:"),
     longQ(4, 'Ticket Description', 'ticket_desc', 'Ticket Description means a description of the incident. Please keep this brief as possible and include approximate times that things happened. Please do not copy and paste shift notes — just provide a brief description and answer the questions below.'),
     el('div', { 'class': 'grid2' }, [
