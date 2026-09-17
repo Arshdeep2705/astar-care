@@ -552,7 +552,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260917130016';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260917124653';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -859,7 +859,7 @@ var state = {
   loading: true,
   loadErr: null,
   pwChange: null,       // {token, workerId, name} during forced password change
-  data: { settings:null, clients:[], reqs:[], workers:[], shifts:[], notes:[], incidents:[], reminders:[], flags:[], avail:[], clocks:[], invoices:[], enums:{}, nearMisses:[], overnightLogs:[] }
+  data: { settings:null, clients:[], reqs:[], workers:[], shifts:[], notes:[], incidents:[], reminders:[], flags:[], avail:[], clocks:[], invoices:[], enums:{}, nearMisses:[], careLogs:[], overnightLogs:[] }
 };
 var ui = {};            // scratch for modal state
 
@@ -909,13 +909,14 @@ function loadAll(){
     sbSel('ac_invoices', 'select=*'),
     sbSel('ac_enums', 'select=*'),
     sbSel('ac_near_misses', 'select=*&order=created_at.desc&limit=2000'),
+    sbSel('ac_care_logs', 'select=*&limit=5000'),
     sbSel('ac_overnight_logs', 'select=*&limit=5000')
   ]).then(function(r){
     D.settings = r[0][0] || { org_name:'Astar Health Service', km_rate:0.99, week_anchor: mondayOf(todayYmd()), fortnight_anchor: mondayOf(todayYmd()) };
     D.clients = r[1]; D.reqs = r[2]; D.workers = r[3]; D.shifts = r[4];
     D.notes = r[5]; D.incidents = r[6]; D.reminders = r[7]; D.flags = r[8];
     D.avail = r[9]; D.clocks = r[10]; D.invoices = r[11];
-    D.nearMisses = r[13] || []; D.overnightLogs = r[14] || [];
+    D.nearMisses = r[13] || []; D.careLogs = r[14] || []; D.overnightLogs = r[15] || [];
     D.enums = {};
     (r[12] || []).forEach(function(e){ D.enums[e.name] = e.values; });
     state.loading = false;
@@ -948,6 +949,7 @@ function shiftNotesForShift(id){ return state.data.notes.filter(function(n){ ret
 function incidentsForShift(id){ return state.data.incidents.filter(function(n){ return n.shift_id === id; }); }
 function clocksForShift(id){ return state.data.clocks.filter(function(c){ return c.shift_id === id; }); }
 function nearMissesForShift(id){ return state.data.nearMisses.filter(function(n){ return n.shift_id === id; }); }
+function careLogForShift(id){ return state.data.careLogs.find(function(n){ return n.shift_id === id; }) || null; }
 function overnightLogForShift(id){ return state.data.overnightLogs.find(function(n){ return n.shift_id === id; }) || null; }
 function remindersForShift(id){ return state.data.reminders.filter(function(r){ return r.shift_id === id; }); }
 function me(){
@@ -1547,11 +1549,13 @@ function statusChip(label, state){ /* state: done | missing | na | pending */
 function recordStatusRow(s){
   var ended = shiftEnded(s);
   var note = shiftNotesForShift(s.id).length > 0;
+  var care = !!careLogForShift(s.id);
   var on = s.type === 'sleepover' ? !!overnightLogForShift(s.id) : null;
   var inc = incidentsForShift(s.id).length;
   var nm = nearMissesForShift(s.id).length;
   var row = el('div', { 'class': 'nc-status' }, [
     statusChip(note ? 'Shift note saved' : (ended ? 'Shift note missing' : 'Shift note not yet due'), note ? 'done' : (ended ? 'missing' : 'na')),
+    statusChip(care ? 'Care log saved' : (ended ? 'Care log missing' : 'Care log'), care ? 'done' : (ended ? 'missing' : 'na')),
     on === null ? null : statusChip(on ? 'Overnight summary saved' : (ended ? 'Overnight summary missing' : 'Overnight summary'), on ? 'done' : (ended ? 'missing' : 'na')),
     inc ? statusChip(inc + ' incident report' + (inc === 1 ? '' : 's'), 'done') : null,
     nm ? statusChip(nm + ' near miss' + (nm === 1 ? '' : 'es'), 'done') : null
@@ -1577,9 +1581,10 @@ function nowCard(s, w, kind){
     card.appendChild(clockRow);
   }
   card.appendChild(recordStatusRow(s));
-  var onLog = overnightLogForShift(s.id);
+  var careLog = careLogForShift(s.id), onLog = overnightLogForShift(s.id);
   card.appendChild(el('div', { 'class': 'nc-actions' }, [
     el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(){ openNoteModal({ shift: s, worker: w }); } }, [svgIcon(IC.plus), shiftNotesForShift(s.id).length ? 'Add another note' : 'Write the shift note']),
+    el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openCareLogModal({ shift: s, worker: w }); } }, careLog ? 'Edit care log' : 'Care log'),
     s.type === 'sleepover' ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openOvernightModal({ shift: s, worker: w }); } }, onLog ? 'Edit overnight summary' : 'Overnight summary') : null,
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openIncidentModal({ shift: s, worker: w }); } }, 'Incident report'),
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openNearMissModal({ shift: s, worker: w }); } }, 'Near miss')
@@ -1790,11 +1795,13 @@ function shiftCard(s, w, opts){
   card.appendChild(recordStatusRow(s));
   /* actions */
   var nearMisses = nearMissesForShift(s.id);
+  var careLog = careLogForShift(s.id);
   var onLog = overnightLogForShift(s.id);
   card.appendChild(el('div', { 'class': 'sc-actions', style: 'flex-wrap:wrap' }, [
     el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(){ openNoteModal({ shift: s, worker: w }); } }, [svgIcon(IC.plus), 'Add note']),
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openIncidentModal({ shift: s, worker: w }); } }, 'Incident report'),
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openNearMissModal({ shift: s, worker: w }); } }, 'Near miss'),
+    el('button', { 'class': 'btn btn-sm ' + (careLog ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openCareLogModal({ shift: s, worker: w }); } }, careLog ? 'Care log ✓' : 'Care log'),
     s.type === 'sleepover' ? el('button', { 'class': 'btn btn-sm ' + (onLog ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openOvernightModal({ shift: s, worker: w }); } }, onLog ? 'Overnight ✓' : 'Overnight summary') : null
   ]));
 
@@ -3201,10 +3208,11 @@ function openAdminShift(s){
   }
   /* evidence logs */
   {
-    var nms = nearMissesForShift(s.id), ol = overnightLogForShift(s.id);
+    var nms = nearMissesForShift(s.id), cl = careLogForShift(s.id), ol = overnightLogForShift(s.id);
     body.appendChild(el('div', { 'class': 't-label', style: 'margin:16px 0 8px' }, 'Evidence logs'));
     body.appendChild(el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
       el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openNearMissModal({ shift: s, worker: w || me() }); } }, 'Near miss' + (nms.length ? ' (' + nms.length + ')' : '')),
+      el('button', { 'class': 'btn btn-sm ' + (cl ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openCareLogModal({ shift: s, worker: w || me() }); } }, cl ? 'Care log ✓' : 'Care log'),
       s.type === 'sleepover' ? el('button', { 'class': 'btn btn-sm ' + (ol ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openOvernightModal({ shift: s, worker: w || me() }); } }, ol ? 'Overnight ✓' : 'Overnight summary') : null
     ]));
     nms.forEach(function(nm){
@@ -4369,7 +4377,7 @@ window.addEventListener('resize', (function(){
   render();
   if (state.auth) loadAll().then(render);
 })();
-/* ================= evidence logs: near miss, overnight summary (the personal care log was retired 17 Sep 2026) ================= */
+/* ================= evidence logs: near miss, personal care log, overnight summary ================= */
 /* These quick structured forms feed the admin Reports tab. Nothing is parsed out of
    the free-text notes — every number on a report comes from a field a worker filled. */
 /* Where it happened. Places, not transfer types — whether a transfer was happening is asked
@@ -4527,6 +4535,84 @@ function openNearMissModal(opts){
       el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'),
       saveBtn
     ])
+  ]);
+  openModal(m);
+}
+
+/* ---------- personal care log (one per shift) ---------- */
+function openCareLogModal(opts){
+  var shift = opts.shift;
+  var worker = opts.worker || me();
+  var client = clientById(shift.client_id);
+  var ex = careLogForShift(shift.id);
+  var who = client ? firstName(client.name) : 'the participant';
+  function keep(v){ return v == null ? '' : v; }
+  var f = {
+    pad_wet: ex ? keep(ex.pad_wet) : '', pad_bowel: ex ? keep(ex.pad_bowel) : '', bed_wet: ex ? keep(ex.bed_wet) : '', bedding_changes: ex ? keep(ex.bedding_changes) : '',
+    shower_offered: ex ? (ex.shower_offered ? 'Yes' : 'No') : '',
+    shower_done: ex ? (ex.shower_done ? 'Yes' : 'No') : '',
+    shower_prompts: ex ? keep(ex.shower_prompts) : '',
+    care_refusals: ex ? keep(ex.care_refusals) : '', transfers: ex ? keep(ex.transfers) : '', transfer_unsafe_alone: ex ? keep(ex.transfer_unsafe_alone) : ''
+  };
+  var showerDet = el('div', { style: f.shower_offered === 'No' ? 'display:none' : '' }, [
+    evYesNo(f, 'shower_done', 'Was the shower done?'),
+    evNum(f, 'shower_prompts', 'How many prompts before ' + who + ' agreed to the shower', 'Count each time it was offered or ' + who + ' was encouraged before accepting. If the shower was declined altogether, enter the number of prompts made.')
+  ]);
+  var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
+  var saveBtn = el('button', { 'class': 'btn btn-pri', onclick: save }, ex ? 'Save changes' : 'Save care log');
+  function fail(msg){ errBox.style.display = 'block'; errBox.textContent = msg; busyBtn(saveBtn, false); }
+  function save(){
+    if (f.pad_wet === '' && f.pad_bowel === '' && f.transfers === '') return fail('Enter at least the pad changes and transfers for this shift. Type 0 if there were none; leave a box empty only if you did not observe it.');
+    if (f.shower_offered === '') return fail('Say whether a shower was offered this shift.');
+    if (f.shower_offered === 'Yes' && f.shower_done === '') return fail('Say whether the shower was done.');
+    errBox.style.display = 'none';
+    busyBtn(saveBtn, true);
+    var rec = {
+      pad_wet: evIntOrNull(f.pad_wet), pad_bowel: evIntOrNull(f.pad_bowel), bed_wet: evIntOrNull(f.bed_wet), bedding_changes: evIntOrNull(f.bedding_changes),
+      shower_offered: f.shower_offered === 'Yes', shower_done: f.shower_offered === 'Yes' && f.shower_done === 'Yes',
+      shower_prompts: f.shower_offered === 'Yes' ? evIntOrNull(f.shower_prompts) : null,
+      care_refusals: evIntOrNull(f.care_refusals), transfers: evIntOrNull(f.transfers), transfer_unsafe_alone: evIntOrNull(f.transfer_unsafe_alone),
+      updated_at: new Date().toISOString()
+    };
+    var zeroKeys = ['pad_wet','pad_bowel','bed_wet','bedding_changes','shower_prompts','care_refusals','transfers','transfer_unsafe_alone'];
+    var p;
+    if (ex) p = evSaveWithNullFallback(function(r){ return sbUpd('ac_care_logs', 'id=eq.' + ex.id, r); }, rec, zeroKeys);
+    else { rec.shift_id = shift.id; rec.participant_id = shift.client_id; rec.worker_id = worker ? worker.id : null; delete rec.updated_at; p = evSaveWithNullFallback(function(r){ return sbIns('ac_care_logs', [r]); }, rec, zeroKeys); }
+    p.then(function(){ closeModal(); toast('Care log saved'); refresh(); })["catch"](function(e){ fail(e.message); });
+  }
+  var body = el('div', { 'class': 'modal-body' }, [
+    el('div', { 'class': 'q-help', style: 'margin-bottom:12px' }, 'Numbers only, for this shift with ' + who + '. Type 0 when something did not happen. Leave a box empty only if you did not observe it — an empty box is recorded as "not recorded", not as 0.'),
+    el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Continence'),
+    el('div', { 'class': 'grid2' }, [
+      evNum(f, 'pad_wet', 'Pad changes (wet)'),
+      evNum(f, 'pad_bowel', 'Pad changes (bowel movement)')
+    ]),
+    el('div', { 'class': 'grid2' }, [
+      evNum(f, 'bed_wet', 'Times found wet in bed'),
+      evNum(f, 'bedding_changes', 'Bedding changes')
+    ]),
+    el('div', { 'class': 't-label', style: 'margin:6px 0 8px' }, 'Shower'),
+    evYesNo(f, 'shower_offered', 'Was a shower offered this shift?', function(){ showerDet.style.display = f.shower_offered === 'No' ? 'none' : ''; }),
+    showerDet,
+    el('div', { 'class': 't-label', style: 'margin:6px 0 8px' }, 'Refusals and manual handling'),
+    evNum(f, 'care_refusals', 'Other care refusals needing prompting', 'Times ' + who + ' declined personal care (pad change, clothing change, toileting) and had to be prompted before accepting.'),
+    el('div', { 'class': 'grid2' }, [
+      evNum(f, 'transfers', 'Assisted transfers this shift', 'Every couch, wheelchair, bed, toilet, shower chair and vehicle transfer.'),
+      evNum(f, 'transfer_unsafe_alone', 'Transfers one worker could not do safely alone', 'Times you needed a second person, or could only manage with real difficulty or risk.')
+    ]),
+    errBox
+  ]);
+  var m = el('div', { 'class': 'modal modal-wide' }, [
+    el('div', { 'class': 'sheet-grab' }),
+    el('div', { 'class': 'modal-head' }, [
+      el('div', null, [
+        el('div', { 'class': 't-title' }, 'Personal care log'),
+        el('div', { 'class': 't-cap' }, (client ? client.name : '') + ' · ' + fmtDate(shift.date) + ' · ' + fmtRange(shift.start_t, shift.end_t))
+      ]),
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
+    ]),
+    body,
+    el('div', { 'class': 'modal-foot' }, [ el('div', { 'class': 'spacer' }), el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Cancel'), saveBtn ])
   ]);
   openModal(m);
 }
@@ -4760,7 +4846,9 @@ var EV_DEFINITIONS = [
   ['Counted once', 'A fall or near miss that appears in an incident report and again in a note or document is one event: the structured record is counted; the review links the repeat to it. Reviewed observations with no structured record are counted as their own event. Look-alikes on the same date within 30 minutes are listed for review, not merged.'],
   ['Overnight assistance duration', 'From the overnight summary: the X-coded 15-minute blocks of the paper sleep log inside 23:00–07:00 (elapsed time the worker was assisting). Where a night has no summary but has reviewed observations with start and end times, the merged elapsed time of those intervals is shown and the night is marked partial. Overlapping intervals are merged. Awake-without-assistance is shown only when the whole 23:00–07:00 window is accounted for (asleep + assistance recorded), and the window length is taken from the actual clock times, so a daylight-saving night is 7 or 9 hours, not 8.'],
   ['Wakes', 'The overnight summary’s wake count is the number of times the participant woke needing support BEFORE the wake they got up for the day. The final wake is not included. A wake is not the same as an assistance episode; one wake can involve several activities.'],
-  ['Assisted transfers', 'Counted from transfer observations a reviewer accepted from shift notes and uploaded documents. The personal care log was retired on 17 September 2026. Mentions of a wheelchair in prose are not transfers.'],
+  ['Assisted transfers', 'From the personal care log’s structured count. On a day with no care log, individually reviewed transfer observations are counted instead; the same day is never counted from both. Mentions of a wheelchair in prose are not transfers.'],
+  ['Care measures', 'Total and per-day are computed only over the logs that answered that measure; per-day divides by the number of days with that measure recorded. Logs saved before 7 September 2026 stored blank answers as 0 and are listed under checks.'],
+  ['Showers', '“Offered” is what the worker recorded. “Done” and “declined” are recorded answers; a shower recorded as offered with no completion answer is shown as “outcome not recorded”, not as declined.'],
   ['Incidents', 'Falls are incidents the worker recorded as a fall. “Involving an emergency call” counts incidents where any emergency service was recorded as called; the form does not record how many calls or whether the service attended. Injuries: the worker’s answer; no answer = unknown.'],
   ['Locations and activities', 'Location is where the record says it happened. Whether a transfer was in progress is the worker’s answer to that question; for records made before the question existed (before 9 September 2026) a transfer is inferred only when the recorded location itself names a transfer, and those rows are marked as inferred.'],
   ['Excluded material', 'Sources marked excluded (training samples, generated examples) and observations that are proposed or rejected never enter any figure. Demonstration mode uses an entirely synthetic participant.']
@@ -4822,6 +4910,7 @@ function evBuildDataset(inp){
   shifts.forEach(function(s){ s._scope = scope(s); });
   var incs = (inp.incidents || []).filter(function(i){ return i.participant_id === cid && inRange(i.incident_date); });
   var nms = (inp.nearMisses || []).filter(function(n){ return n.participant_id === cid && inRange(n.nm_date); });
+  var care = (inp.careLogs || []).filter(function(l){ return byId[l.shift_id]; });
   var onl = (inp.overnightLogs || []).filter(function(l){ return byId[l.shift_id]; });
   var notes = (inp.notes || []).filter(function(n){ return byId[n.shift_id] && n.note_type !== 'Mileage'; });
 
@@ -4830,14 +4919,15 @@ function evBuildDataset(inp){
   var nightsAll = shifts.filter(function(s){ return s.type === 'sleepover'; });
   var nightsInScope = nightsAll.filter(function(s){ return s._scope === 'completed'; });
   var noteIds = {}; notes.forEach(function(n){ noteIds[n.shift_id] = 1; });
+  var careIds = {}; care.forEach(function(l){ careIds[l.shift_id] = 1; });
   var onByShift = {}; onl.forEach(function(l){ onByShift[l.shift_id] = l; });
   var days = {}; shifts.forEach(function(s){ days[s.date] = 1; });
   var coverage = {
     periodDays: evDaysBetween(from, to) + 1, daysWithShifts: Object.keys(days).length,
     shifts: { rostered: shifts.length, completed: completed.length, inProgress: shifts.filter(function(s){ return s._scope === 'inProgress'; }).length, future: shifts.filter(function(s){ return s._scope === 'future'; }).length,
-      withNote: completed.filter(function(s){ return noteIds[s.id]; }).length },
+      withNote: completed.filter(function(s){ return noteIds[s.id]; }).length, withCareLog: completed.filter(function(s){ return careIds[s.id]; }).length },
     nights: { rostered: nightsAll.length, inScope: nightsInScope.length, inProgress: nightsAll.filter(function(s){ return s._scope === 'inProgress'; }).length, future: nightsAll.filter(function(s){ return s._scope === 'future'; }).length },
-    records: { incidents: incs.length, nearMisses: nms.length, overnightLogs: onl.length, notes: notes.length,
+    records: { incidents: incs.length, nearMisses: nms.length, careLogs: care.length, overnightLogs: onl.length, notes: notes.length,
       sources: (inp.sources || []).filter(function(s){ return s.participant_id === cid && !s.excluded; }).length,
       observationsAccepted: obs.length, observationsProposed: proposed.length,
       observationsLinked: allObs.filter(function(o){ return evIsLinked(o) && inRange(evNightOf(o)); }).length }
@@ -4892,7 +4982,7 @@ function evBuildDataset(inp){
   var nmDays = {}; nmList.forEach(function(e){ nmDays[e.date] = 1; });
   var nearMisses = {
     list: nmList, n: nmList.length, days: Object.keys(nmDays).length,
-    shiftsDocumented: completed.filter(function(s){ return noteIds[s.id] || onByShift[s.id]; }).length,
+    shiftsDocumented: completed.filter(function(s){ return noteIds[s.id] || careIds[s.id] || onByShift[s.id]; }).length,
     equipment: nmList.filter(function(e){ return e.equipment; }).length,
     transfers: { yes: nmList.filter(function(e){ return e.transfer === 'yes'; }).length, inferred: nmList.filter(function(e){ return e.transfer === 'inferred'; }).length, no: nmList.filter(function(e){ return e.transfer === 'no'; }).length, unknown: nmList.filter(function(e){ return e.transfer === 'unknown'; }).length },
     byLocation: countBy(nmList, function(e){ return [e.location || 'Not recorded']; }),
@@ -4944,11 +5034,30 @@ function evBuildDataset(inp){
       .sort(function(a, b){ return a.night === b.night ? ((evNightAxis(a.start) || 0) - (evNightAxis(b.start) || 0)) : (a.night < b.night ? -1 : 1); })
   };
 
-  /* ---- assisted transfers: reviewed observations only (the personal care log was retired 17 Sep 2026) ---- */
+  /* ---- personal care ---- */
+  var careByDate = {}; care.forEach(function(l){ var d = byId[l.shift_id].date; (careByDate[d] = careByDate[d] || []).push(l); });
+  function measure(key, label){
+    var rec = care.filter(function(l){ return l[key] != null; });
+    var recDays = {}; rec.forEach(function(l){ recDays[byId[l.shift_id].date] = 1; });
+    var nd = Object.keys(recDays).length;
+    return { key: key, label: label, total: rec.length ? evSum(rec.map(function(l){ return +l[key]; })) : null, recorded: rec.length, of: care.length, days: nd, perDay: nd ? evRound(evSum(rec.map(function(l){ return +l[key]; })) / nd) : null, preNullZero: rec.filter(function(l){ return evIsPreNullRow(l) && l[key] === 0; }).length };
+  }
+  var showers = care.filter(function(l){ return l.shower_offered === true; });
   var transferObs = obs.filter(function(o){ return o.category === 'daytime_task' && /transfer/i.test(o.assist_type || ''); });
-  var transferDays = {}; transferObs.forEach(function(o){ transferDays[o.obs_date] = (transferDays[o.obs_date] || 0) + 1; });
-  var transfersData = { events: transferObs.length, days: Object.keys(transferDays).length,
-    daily: Object.keys(transferDays).sort().map(function(d){ return { date: d, transfers: transferDays[d] }; }) };
+  var tMeasure = measure('transfers', 'Assisted transfers');
+  var transferDays = {}; care.filter(function(l){ return l.transfers != null; }).forEach(function(l){ transferDays[byId[l.shift_id].date] = 1; });
+  var obsOnlyDays = {}; transferObs.forEach(function(o){ if (!transferDays[o.obs_date]) obsOnlyDays[o.obs_date] = (obsOnlyDays[o.obs_date] || 0) + 1; });
+  var transfersFromObs = evSum(Object.keys(obsOnlyDays).map(function(d){ return obsOnlyDays[d]; }));
+  var careData = {
+    logs: care.length, days: Object.keys(careByDate).length,
+    measures: [ measure('pad_wet', 'Pad changes (wet)'), measure('pad_bowel', 'Pad changes (bowel)'), measure('bed_wet', 'Found wet in bed'), measure('bedding_changes', 'Bedding changes'), measure('care_refusals', 'Care refusals needing prompting') ],
+    transfers: { logged: tMeasure.total, loggedRecorded: tMeasure.recorded, loggedOf: tMeasure.of, loggedDays: tMeasure.days, perDay: tMeasure.perDay, fromObservations: transfersFromObs, observationDays: Object.keys(obsOnlyDays).length, observationEvents: transferObs.length,
+      total: (tMeasure.total == null && !transfersFromObs) ? null : (tMeasure.total || 0) + transfersFromObs },
+    showers: { offered: showers.length, done: showers.filter(function(l){ return l.shower_done === true; }).length, declined: showers.filter(function(l){ return l.shower_done === false && !evIsPreNullRow(l); }).length,
+      outcomeNotRecorded: showers.filter(function(l){ return l.shower_done == null || (l.shower_done === false && evIsPreNullRow(l)); }).length,
+      promptsAvg: (function(){ var a = showers.filter(function(l){ return l.shower_prompts != null; }).map(function(l){ return +l.shower_prompts; }); return a.length ? evRound(evAvg(a)) : null; })(), promptsN: showers.filter(function(l){ return l.shower_prompts != null; }).length },
+    dailyTransfers: Object.keys(careByDate).sort().map(function(d){ var v = careByDate[d].filter(function(l){ return l.transfers != null; }); return { date: d, transfers: v.length ? evSum(v.map(function(l){ return +l.transfers; })) : null, logs: careByDate[d].length }; })
+  };
 
   /* ---- time series: day buckets up to 35 days, else ISO weeks ---- */
   var bucketMode = coverage.periodDays <= 35 ? 'day' : 'week';
@@ -4956,7 +5065,7 @@ function evBuildDataset(inp){
   if (bucketMode === 'day') { for (var d = from; d <= to; d = evAddDays(d, 1)) keys.push(d); } else { for (var w = evMondayOf(from); w <= to; w = evAddDays(w, 7)) keys.push(w); }
   function bkey(date){ return bucketMode === 'day' ? date : evMondayOf(date); }
   var series = { mode: bucketMode, buckets: keys.map(function(k){
-    var tr = transfersData.daily.filter(function(x){ return bkey(x.date) === k; });
+    var tr = careData.dailyTransfers.filter(function(x){ return bkey(x.date) === k && x.transfers != null; });
     return { key: k, incidents: incidentList.filter(function(e){ return bkey(e.date) === k; }).length, falls: falls.filter(function(e){ return bkey(e.date) === k; }).length, nearMisses: nmList.filter(function(e){ return bkey(e.date) === k; }).length,
       transfers: tr.length ? evSum(tr.map(function(x){ return x.transfers; })) : null, transferDays: tr.length,
       shifts: completed.filter(function(s){ return bkey(s.date) === k; }).length, nights: inScopeRows.filter(function(r){ return bkey(r.date) === k; }).length, nightsLogged: inScopeRows.filter(function(r){ return bkey(r.date) === k && r.status !== 'missing'; }).length };
@@ -4966,7 +5075,7 @@ function evBuildDataset(inp){
   var metrics = {
     falls: { value: incidents.falls, unit: 'falls', of: incidents.n, note: incidents.n + ' incident report' + (incidents.n === 1 ? '' : 's') + ' in period' },
     nearMisses: { value: nearMisses.n, unit: 'near misses', note: nearMisses.days + ' day' + (nearMisses.days === 1 ? '' : 's') + ' with a record' },
-    transfers: { value: transfersData.events ? transfersData.events : null, unit: 'assisted transfers', note: transfersData.events ? 'reviewed observations on ' + transfersData.days + ' day' + (transfersData.days === 1 ? '' : 's') : 'no reviewed transfer observations; the personal care log was retired 17 Sep 2026' },
+    transfers: { value: careData.transfers.total, unit: 'assisted transfers', note: careData.transfers.loggedRecorded + ' of ' + careData.transfers.loggedOf + ' care logs answered' + (careData.transfers.fromObservations ? ' + ' + careData.transfers.fromObservations + ' reviewed on ' + careData.transfers.observationDays + ' unlogged day' + (careData.transfers.observationDays === 1 ? '' : 's') : '') },
     emergency: { value: incidents.emergencyInvolved, unit: 'incidents involving an emergency call', of: incidents.n, note: 'of ' + incidents.n + ' incident' + (incidents.n === 1 ? '' : 's') + '; attendance not recorded on the form' },
     overnightAvg: { value: overnight.avgAssist.hours, unit: 'h per night', note: overnight.avgAssist.n + ' of ' + overnight.avgAssist.of + ' nights in scope' + (overnight.avgAssist.n && overnight.avgAssist.fromSummary < overnight.avgAssist.n ? ' (' + (overnight.avgAssist.n - overnight.avgAssist.fromSummary) + ' from reviewed intervals)' : '') },
     nightsUsable: { value: overnight.inScope ? overnight.complete : null, unit: 'nights with complete data', of: overnight.inScope, note: overnight.partial + ' partial · ' + overnight.missing + ' not recorded' + (overnight.notYet ? ' · ' + overnight.notYet + ' not yet finished' : '') }
@@ -4974,6 +5083,7 @@ function evBuildDataset(inp){
 
   /* ---- checks for a reviewer ---- */
   var checks = [];
+  care.forEach(function(l){ if (evIsPreNullRow(l)) checks.push({ kind: 'pre-null zero', date: byId[l.shift_id].date, detail: 'Care log saved before 7 Sep 2026: a 0 may be an unanswered box.', ref: l.id }); });
   nightRows.forEach(function(r){
     if (r.preNullZero) checks.push({ kind: 'pre-null zero', date: r.date, detail: 'Overnight summary saved before 7 Sep 2026 with 0 wakes: may be an unanswered box.', ref: r.summaryId });
     if (r.status === 'complete' && r.wakes != null && r.observed.episodes && r.observed.episodes !== r.wakes) checks.push({ kind: 'reconcile', date: r.date, detail: 'Night of ' + r.date + ': summary records ' + r.wakes + ' wake' + (r.wakes === 1 ? '' : 's') + ' before the final wake; ' + r.observed.episodes + ' reviewed assistance episode' + (r.observed.episodes === 1 ? '' : 's') + ' (a wake can involve several episodes). Nothing was changed.', ref: r.shiftId });
@@ -4993,8 +5103,8 @@ function evBuildDataset(inp){
   var sourceIndex = (inp.sources || []).filter(function(s){ return s.participant_id === cid && !s.excluded; }).map(function(s, i){ return { n: i + 1, id: s.id, title: s.title || s.file_name || s.kind, kind: s.kind, author: s.author || '', from: s.event_from || '', to: s.event_to || '', sha256: s.sha256 || '', updated_at: s.updated_at || s.created_at || '' }; });
 
   return { version: EV_CALC_VERSION, builtAt: now.toISOString(), client: { id: cid, name: inp.client.name }, from: from, to: to, tz: inp.tz || 'Australia/Melbourne', sleepBlock: EV_SLEEP_BLOCK,
-    coverage: coverage, metrics: metrics, overnight: overnight, incidents: incidents, nearMisses: nearMisses, transfers: transfersData, series: series, checks: checks,
-    sourceIndex: sourceIndex, recordIds: { incidents: incs.map(function(i){ return i.id; }), nearMisses: nms.map(function(n){ return n.id; }), overnightLogs: onl.map(function(l){ return l.id; }), observations: obs.map(function(o){ return o.id; }) },
+    coverage: coverage, metrics: metrics, overnight: overnight, incidents: incidents, nearMisses: nearMisses, care: careData, series: series, checks: checks,
+    sourceIndex: sourceIndex, recordIds: { incidents: incs.map(function(i){ return i.id; }), nearMisses: nms.map(function(n){ return n.id; }), careLogs: care.map(function(l){ return l.id; }), overnightLogs: onl.map(function(l){ return l.id; }), observations: obs.map(function(o){ return o.id; }) },
     definitions: EV_DEFINITIONS };
 }
 
@@ -5065,7 +5175,7 @@ function evFindCandidates(text, ctx){
 function evDemoDataset(from, to){
   var c = { id: 'demo-participant', name: 'Demo Participant (synthetic)', address: '1 Example Street, Sampleville (synthetic)', colour: '#6B7280' };
   var seed = 7; function rnd(){ seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
-  var shifts = [], incidents = [], nearMisses = [], overnightLogs = [], notes = [], sources = [], observations = [];
+  var shifts = [], incidents = [], nearMisses = [], careLogs = [], overnightLogs = [], notes = [], sources = [], observations = [];
   var nowIso = to + 'T12:00:00';
   var n = 0;
   for (var d = from; d <= to; d = evAddDays(d, 1)) {
@@ -5074,6 +5184,7 @@ function evDemoDataset(from, to){
     var night = { id: 'demo-s-' + n + 'n', client_id: c.id, date: d, type: 'sleepover', start_t: '18:00', end_t: '09:00', worker_id: 'demo-w2', created_at: d + 'T00:00:00Z' };
     shifts.push(day, night);
     var r = rnd();
+    if (r > 0.25) careLogs.push({ id: 'demo-c-' + n, shift_id: day.id, participant_id: c.id, pad_wet: Math.floor(rnd() * 3) + 1, pad_bowel: rnd() > 0.5 ? 1 : 0, bed_wet: rnd() > 0.7 ? 1 : 0, bedding_changes: rnd() > 0.7 ? 1 : 0, shower_offered: true, shower_done: rnd() > 0.3 ? true : (rnd() > 0.5 ? false : null), shower_prompts: Math.floor(rnd() * 4), care_refusals: Math.floor(rnd() * 2), transfers: 6 + Math.floor(rnd() * 8), created_at: d + 'T18:30:00Z' });
     var r2 = rnd();
     if (r2 > 0.3) { var active = evRound(Math.floor(rnd() * 16) * 0.25); overnightLogs.push({ id: 'demo-o-' + n, shift_id: night.id, participant_id: c.id, bed_time: rnd() > 0.5 ? '20:30' : '21:15', wake_time: rnd() > 0.5 ? '03:30' : '05:45', wakes: Math.floor(rnd() * 3), asleep_hours: evRound(Math.max(0, 8 - active - Math.floor(rnd() * 4) * 0.25)), active_hours: active, created_at: evAddDays(d, 1) + 'T09:30:00Z' }); }
     else if (r2 > 0.15) overnightLogs.push({ id: 'demo-o-' + n, shift_id: night.id, participant_id: c.id, bed_time: '21:00', wake_time: null, wakes: null, asleep_hours: null, active_hours: null, created_at: evAddDays(d, 1) + 'T09:30:00Z' });
@@ -5089,7 +5200,7 @@ function evDemoDataset(from, to){
     { id: 'demo-ob-2', participant_id: c.id, source_id: 'demo-src-1', obs_date: evAddDays(nightForObs, 1), start_time: '03:30', end_time: '03:50', timing: 'estimated', category: 'overnight_assist', assist_type: 'Transfer', reason: 'Assisted to the toilet (as recorded)', outcome: '', status: 'accepted', source_ref: 'Sentence 3', reviewer: 'Demo reviewer', reviewed_at: to + 'T00:00:00Z' },
     { id: 'demo-ob-3', participant_id: c.id, source_id: 'demo-src-1', obs_date: evAddDays(nightForObs, 1), start_time: '03:35', timing: 'estimated', category: 'overnight_assist', assist_type: 'Continence / toileting', reason: 'repeat account', outcome: '', status: 'proposed', source_ref: 'Sentence 3 (again)' }
   );
-  return { client: c, now: nowIso, shifts: shifts, incidents: incidents, nearMisses: nearMisses, overnightLogs: overnightLogs, notes: notes, sources: sources, observations: observations, versions: [], workers: [{ id: 'demo-w1', name: 'Demo Worker A' }, { id: 'demo-w2', name: 'Demo Worker B' }] };
+  return { client: c, now: nowIso, shifts: shifts, incidents: incidents, nearMisses: nearMisses, careLogs: careLogs, overnightLogs: overnightLogs, notes: notes, sources: sources, observations: observations, versions: [], workers: [{ id: 'demo-w1', name: 'Demo Worker A' }, { id: 'demo-w2', name: 'Demo Worker B' }] };
 }
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { evBuildDataset: evBuildDataset, evMergeIntervals: evMergeIntervals, evExportModel: evExportModel, evFindCandidates: evFindCandidates, evDemoDataset: evDemoDataset, evSplitSegmentDate: evSplitSegmentDate, evMergeMinutes: evMergeMinutes, evNightOf: evNightOf, evBlockHours: evBlockHours, EV_CALC_VERSION: EV_CALC_VERSION, EV_DEFINITIONS: EV_DEFINITIONS };
@@ -5138,17 +5249,17 @@ function sumLoad(force){
     sbSelAll('ac_shifts', 'select=*&client_id=eq.' + c.id + '&date=gte.' + S.from + '&date=lte.' + S.to),
     sbSelAll('ac_incident_forms', q + '&incident_date=gte.' + S.from + '&incident_date=lte.' + S.to),
     sbSelAll('ac_near_misses', q + '&nm_date=gte.' + S.from + '&nm_date=lte.' + S.to),
-    sbSelAll('ac_overnight_logs', q), sbSelAll('ac_note_entries', q + '&note_type=neq.Mileage&select=id,shift_id,participant_id,worker_id,note_type,body,created_at'),
+    sbSelAll('ac_care_logs', q), sbSelAll('ac_overnight_logs', q), sbSelAll('ac_note_entries', q + '&note_type=neq.Mileage&select=id,shift_id,participant_id,worker_id,note_type,body,created_at'),
     ev
   ]).then(function(r){
-    S.data = { client: c, shifts: r[0], incidents: r[1], nearMisses: r[2], overnightLogs: r[3], notes: r[4], sources: r[5].sources, observations: r[5].observations };
-    S.versions = r[5].versions || []; S.loadedKey = key; S.loading = false; sumCompute(); render();
+    S.data = { client: c, shifts: r[0], incidents: r[1], nearMisses: r[2], careLogs: r[3], overnightLogs: r[4], notes: r[5], sources: r[6].sources, observations: r[6].observations };
+    S.versions = r[6].versions || []; S.loadedKey = key; S.loading = false; sumCompute(); render();
   })["catch"](function(e){ S.loading = false; S.err = e.message; render(); });
 }
 function sumCompute(){
   var S = sumState(), c = sumClient(); if (!S.data || !c) return;
   var inp = { client: c, from: S.from, to: S.to, tz: 'Australia/Melbourne', now: S.demo ? S.data.now : new Date().toISOString() };
-  ['shifts', 'incidents', 'nearMisses', 'overnightLogs', 'notes', 'sources', 'observations'].forEach(function(k){ inp[k] = S.data[k] || []; });
+  ['shifts', 'incidents', 'nearMisses', 'careLogs', 'overnightLogs', 'notes', 'sources', 'observations'].forEach(function(k){ inp[k] = S.data[k] || []; });
   S.ds = evBuildDataset(inp);
 }
 function sumSetPeriod(from, to, preset){ var S = sumState(); S.from = from; S.to = to; S.preset = preset || null; sumLoad(true); }
@@ -5275,6 +5386,7 @@ function anOpenRecord(kind, id){
   if (kind === 'incident') { var i = D.incidents.find(function(x){ return x.id === id; }); if (i) openIncidentModal({ incident: i, shift: i.shift_id ? (D.shifts.find(function(s){ return s.id === i.shift_id; }) || shiftById(i.shift_id)) : null }); }
   else if (kind === 'near_miss') { var nmr = D.nearMisses.find(function(x){ return x.id === id; }); if (nmr) openNearMissModal({ nearMiss: nmr, shift: nmr.shift_id ? (D.shifts.find(function(s){ return s.id === nmr.shift_id; }) || null) : null }); }
   else if (kind === 'overnight') { var sh = D.shifts.find(function(s){ return s.id === id; }); if (sh) { if (!state.data.shifts.some(function(x){ return x.id === sh.id; })) state.data.shifts.push(sh); if (!state.data.overnightLogs.some(function(l){ return l.shift_id === sh.id; })) D.overnightLogs.filter(function(l){ return l.shift_id === sh.id; }).forEach(function(l){ state.data.overnightLogs.push(l); }); openOvernightModal({ shift: sh }); } }
+  else if (kind === 'care') { var sh2 = D.shifts.find(function(s){ return s.id === id; }); if (sh2) { if (!state.data.shifts.some(function(x){ return x.id === sh2.id; })) state.data.shifts.push(sh2); if (!state.data.careLogs.some(function(l){ return l.shift_id === sh2.id; })) D.careLogs.filter(function(l){ return l.shift_id === sh2.id; }).forEach(function(l){ state.data.careLogs.push(l); }); openCareLogModal({ shift: sh2 }); } }
   else if (kind === 'observation') { var o = (D.observations || []).find(function(x){ return x.id === id; }); if (o) sumObsModal(o); }
 }
 function anInspect(title, sub, rows){
@@ -5360,7 +5472,7 @@ function sumSeriesTable(ds, cols){
   return rpTable([ ds.series.mode === 'day' ? 'Day' : 'Week starting' ].concat(cols.map(function(c){ return { t: c[1], n: true }; })).concat([{ t: 'Shifts in scope', n: true }]), ds.series.buckets.map(function(k){ return [ fmtDate(k.key) ].concat(cols.map(function(c){ return { t: k[c[0]] == null ? '—' : String(k[c[0]]), n: true }; })).concat([{ t: String(k.shifts + k.nights), n: true }]); }));
 }
 function sumOverview(doc, ds, c){
-  var o = ds.overnight, tr = ds.transfers;
+  var o = ds.overnight, cr = ds.care;
   doc.appendChild(sumMetricsRow(ds));
   /* A overnight */
   doc.appendChild(anSec('Overnight assistance', 'Recorded worker assistance per night inside 23:00–07:00, in hours. Hatched = partial record, dashed = not recorded. Select a bar to see its records.', o.rows.length ? [
@@ -5374,11 +5486,16 @@ function sumOverview(doc, ds, c){
     anCaption(ds.incidents.falls + ' fall' + (ds.incidents.falls === 1 ? '' : 's') + ' and ' + ds.nearMisses.n + ' near miss' + (ds.nearMisses.n === 1 ? '' : 'es') + ' across ' + ds.coverage.shifts.completed + ' completed shift' + (ds.coverage.shifts.completed === 1 ? '' : 's') + ', ' + ds.coverage.shifts.withNote + ' documented with a note'),
     anTableToggle('Show as a table', sumSeriesTable(ds, [['falls', 'Falls'], ['nearMisses', 'Near misses'], ['incidents', 'All incidents']]))
   ]));
-  /* C assisted transfers (reviewed observations; the personal care log was retired 17 Sep 2026) */
-  doc.appendChild(anSec('Assisted transfers', 'Transfer observations a reviewer accepted from shift notes and uploaded documents, per ' + ds.series.mode + '. The structured personal care log was retired on 17 September 2026; a ' + ds.series.mode + ' with no accepted observation is not zero.', tr.events ? [
-    anSeries(ds.series.buckets.map(function(k){ return { label: ds.series.mode === 'day' ? fmtDM(k.key) : 'wk ' + fmtDM(k.key), vals: [k.transfers], coverage: k.transferDays }; }), [{ label: 'Assisted transfers', color: RP_C.acc }], { height: 170, width: window.innerWidth < 640 ? 380 : 460, aria: 'Assisted transfers per ' + ds.series.mode }),
-    anCaption(tr.events + ' reviewed transfer' + (tr.events === 1 ? '' : 's') + ' on ' + tr.days + ' day' + (tr.days === 1 ? '' : 's'))
-  ] : [ anEmpty('No reviewed transfer observations in this period.') ]));
+  /* C transfers and personal care */
+  var meas = cr.measures.filter(function(m){ return m.recorded > 0; });
+  doc.appendChild(anSec('Transfers and personal care', 'Assisted transfers per ' + ds.series.mode + ' from the personal care log (structured count), and the care measures that have data. Days without a log are not zero.', cr.logs || cr.transfers.fromObservations ? [
+    el('div', { 'class': 'an-grid2' }, [
+      el('div', null, [ el('div', { 'class': 'an-sub' }, 'Assisted transfers'), anSeries(ds.series.buckets.map(function(k){ return { label: ds.series.mode === 'day' ? fmtDM(k.key) : 'wk ' + fmtDM(k.key), vals: [k.transfers], coverage: k.transferDays }; }), [{ label: 'Assisted transfers', color: RP_C.acc }], { height: 170, width: window.innerWidth < 640 ? 380 : 460, aria: 'Assisted transfers per ' + ds.series.mode }), anCaption((cr.transfers.logged == null ? 'No care log answered the transfers count' : cr.transfers.logged + ' transfers on ' + cr.transfers.loggedDays + ' logged day' + (cr.transfers.loggedDays === 1 ? '' : 's') + (cr.transfers.perDay != null ? ' · ' + hrsFmt(cr.transfers.perDay) + ' per logged day' : '')) + (cr.transfers.fromObservations ? ' · +' + cr.transfers.fromObservations + ' reviewed on unlogged days' : '')) ]),
+      el('div', null, [ el('div', { 'class': 'an-sub' }, 'Care measures (totals over the logs that answered)'), anHBars(meas.map(function(m){ return { label: m.label, n: m.total, note: 'in ' + m.recorded + ' of ' + m.of + ' logs' + (m.perDay != null ? ' · ' + hrsFmt(m.perDay) + '/day' : '') }; }), { empty: 'No care measure has an answer in this period.' }),
+        cr.showers.offered ? anCaption('Showers: ' + cr.showers.offered + ' offered · ' + cr.showers.done + ' done · ' + cr.showers.declined + ' declined · ' + cr.showers.outcomeNotRecorded + ' outcome not recorded') : null ])
+    ]),
+    anTableToggle('Show days as a table', rpTable([ 'Day', { t: 'Care logs', n: true }, { t: 'Transfers', n: true }, '' ], cr.dailyTransfers.map(function(d){ var sh = ds.recordIds && (sumState().data.shifts || []).filter(function(s){ return s.date === d.date && (sumState().data.careLogs || []).some(function(l){ return l.shift_id === s.id; }); }); return [ fmtDate(d.date), { t: String(d.logs), n: true }, { t: d.transfers == null ? 'not answered' : String(d.transfers), n: true, m: d.transfers == null }, sh && sh.length ? el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ anInspect('Care logs on ' + fmtDateFull(d.date), '', sh.map(function(s){ return { label: (s.type === 'sleepover' ? 'Sleepover ' : 'Day shift ') + fmtRange(s.start_t, s.end_t), open: { kind: 'care', id: s.id } }; })); } }, 'Records') : '' ]; })))
+  ] : [ anEmpty('No personal care logs in this period.') ]));
 }
 
 /* ---------- Overnight ---------- */
@@ -5505,7 +5622,7 @@ function sumManageBody(body){
         ]) ];
     })) : anEmpty('No uploaded or pasted sources for this participant.'));
     body.appendChild(el('div', { 'class': 'an-sub', style: 'margin-top:14px' }, 'In-app records in this period'));
-    body.appendChild(rpTable([ 'Record type', { t: 'Count', n: true } ], [ ['Shifts', String((D.shifts || []).length)], ['Shift notes', String((D.notes || []).length)], ['Incident reports', String((D.incidents || []).length)], ['Near misses', String((D.nearMisses || []).length)], ['Overnight summaries', String(ds.coverage.records.overnightLogs)] ].map(function(r){ return [ r[0], { t: r[1], n: true } ]; })));
+    body.appendChild(rpTable([ 'Record type', { t: 'Count', n: true } ], [ ['Shifts', String((D.shifts || []).length)], ['Shift notes', String((D.notes || []).length)], ['Incident reports', String((D.incidents || []).length)], ['Near misses', String((D.nearMisses || []).length)], ['Personal care logs', String(ds.care.logs)], ['Overnight summaries', String(ds.coverage.records.overnightLogs)] ].map(function(r){ return [ r[0], { t: r[1], n: true } ]; })));
   } else if (S.drawer === 'checks') {
     body.appendChild(el('p', { 'class': 't-cap', style: 'margin:0 0 10px' }, 'Things a person should look at. Nothing here has been changed automatically.'));
     body.appendChild(ds.checks.length ? rpTable([ 'Kind', 'Date', 'Detail' ], ds.checks.map(function(k){ return [ el('span', { 'class': 'status ' + (k.kind === 'unreviewed' || k.kind === 'possible duplicate' ? 'missing' : 'na') }, k.kind), k.date ? fmtDate(k.date) : '—', k.detail ]; })) : anEmpty('No checks outstanding.'));
@@ -5763,13 +5880,14 @@ function viewSumDoc(main){
   var ov = ds.overnight;
   doc.appendChild(anSec('Overnight assistance per night', 'Hours of recorded worker assistance inside 23:00–07:00. Hatched = partial, dashed = not recorded.', ov.rows.length ? [ sumNightBars(ds, 170), anCaption('n = ' + ov.avgAssist.n + ' nights with a value of ' + ov.inScope + ' in scope · ' + ov.missing + ' not recorded · average ' + anH(ov.avgAssist.hours)) ] : [ anEmpty('No sleepover shifts in this period.') ]));
   doc.appendChild(anSec('Falls and near misses over time', 'Recorded events per ' + ds.series.mode + '. No bar = no recorded event.', [ sumSeriesChart(ds, ['falls', 'nearMisses'], [{ label: 'Falls', color: RP_C.bad }, { label: 'Near misses', color: RP_C.warn }], 150), anLegend([{ c: RP_C.bad, l: 'Falls' }, { c: RP_C.warn, l: 'Near misses' }]), anCaption(ds.incidents.falls + ' falls · ' + ds.nearMisses.n + ' near misses · ' + ds.coverage.shifts.completed + ' completed shifts, ' + ds.coverage.shifts.withNote + ' with a note') ]));
-  doc.appendChild(anSec('Assisted transfers', 'Transfer observations a reviewer accepted from shift notes and uploaded documents; the personal care log was retired 17 September 2026.', ds.transfers.events ? [ anSeries(ds.series.buckets.map(function(k){ return { label: ds.series.mode === 'day' ? fmtDM(k.key) : 'wk ' + fmtDM(k.key), vals: [k.transfers] }; }), [{ label: 'Assisted transfers', color: RP_C.acc }], { height: 160, width: 460 }), anCaption(ds.metrics.transfers.value + ' transfers · ' + ds.metrics.transfers.note) ] : [ anEmpty('No reviewed transfer observations in this period.') ]));
+  var meas = ds.care.measures.filter(function(m){ return m.recorded > 0; });
+  doc.appendChild(anSec('Transfers and personal care', 'Structured counts from the personal care log; totals are over the logs that answered.', ds.care.logs ? [ el('div', { 'class': 'an-grid2' }, [ el('div', null, [ el('div', { 'class': 'an-sub' }, 'Assisted transfers per ' + ds.series.mode), anSeries(ds.series.buckets.map(function(k){ return { label: ds.series.mode === 'day' ? fmtDM(k.key) : 'wk ' + fmtDM(k.key), vals: [k.transfers] }; }), [{ label: 'Assisted transfers', color: RP_C.acc }], { height: 160, width: 460 }), anCaption(ds.metrics.transfers.value == null ? 'Transfers not recorded' : ds.metrics.transfers.value + ' transfers · ' + ds.metrics.transfers.note) ]), el('div', null, [ el('div', { 'class': 'an-sub' }, 'Care measures'), anHBars(meas.map(function(m){ return { label: m.label, n: m.total, note: 'in ' + m.recorded + ' of ' + m.of + ' logs' }; })) ]) ]) ] : [ anEmpty('No personal care logs in this period.') ]));
   if (o.overnight) doc.appendChild(anSec('Overnight detail', 'One row per night the shift started. Wakes exclude the final wake.', [ sumNightTable(ds), ov.timeline.length ? anTimeline(ov.timeline, ov.rows) : null, ov.byActivity.length ? anHBars(ov.byActivity.map(function(a){ return { label: a.activity, n: a.episodes, note: a.hours != null ? '· ' + hrsFmt(a.hours) + ' h timed' : '' }; })) : null ], { cls: 'an-sec-long an-break' }));
   if (o.incidents) doc.appendChild(anSec('Incident detail', ds.incidents.n + ' incident report' + (ds.incidents.n === 1 ? '' : 's') + ' · ' + ds.incidents.falls + ' falls · ' + ds.incidents.emergencyInvolved + ' involving an emergency call · injuries recorded ' + ds.incidents.injuriesYes + ', not answered ' + ds.incidents.injuriesUnknown, ds.incidents.list.length ? [ rpTable([ 'Date · time', 'Type', 'Location', 'Description', 'Response / outcome', 'Emergency', 'Injury' ], ds.incidents.list.map(function(e){ return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), e.types.join(', ') + (e.isFall ? ' · fall' : ''), e.location || '—', (e.description || '').slice(0, 200), [ e.response, e.outcome ].filter(Boolean).join(' · ').slice(0, 200) || '—', e.emergency.join(', ') || '—', e.injuries === 'yes' ? 'Yes' : e.injuries === 'no' ? 'No injury recorded' : 'Not answered' ]; })) ] : [ anEmpty('No incident reports.') ], { cls: 'an-sec-long an-break' }));
   if (o.near) doc.appendChild(anSec('Near miss detail', ds.nearMisses.n + ' recorded · ' + ds.nearMisses.equipment + ' linked to equipment', ds.nearMisses.list.length ? [ rpTable([ 'Date · time', 'Location · activity', 'What nearly happened', 'What prevented it' ], ds.nearMisses.list.map(function(e){ return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), (e.location || '—') + (e.transfer === 'yes' ? ' · during a transfer' : ''), (e.description || '').slice(0, 200), (e.prevented || '—').slice(0, 200) ]; })) ] : [ anEmpty('No near misses.') ], { cls: 'an-sec-long an-break' }));
   if (o.appendix) doc.appendChild(anSec('Appendix: sources, records and definitions', 'The records and sources this document was computed from, as frozen with it.', [
-    el('div', { 'class': 'an-sub' }, 'Record ids'), el('div', { 'class': 't-cap' }, 'Incident reports ' + ds.recordIds.incidents.length + ' · near misses ' + ds.recordIds.nearMisses.length + ' · overnight summaries ' + ds.recordIds.overnightLogs.length + ' · accepted observations ' + ds.recordIds.observations.length),
-    el('div', { 'class': 't-cap', style: 'overflow-wrap:anywhere' }, [].concat(ds.recordIds.incidents, ds.recordIds.nearMisses, ds.recordIds.overnightLogs, ds.recordIds.observations).join(', ') || '—'),
+    el('div', { 'class': 'an-sub' }, 'Record ids'), el('div', { 'class': 't-cap' }, 'Incident reports ' + ds.recordIds.incidents.length + ' · near misses ' + ds.recordIds.nearMisses.length + ' · care logs ' + ds.recordIds.careLogs.length + ' · overnight summaries ' + ds.recordIds.overnightLogs.length + ' · accepted observations ' + ds.recordIds.observations.length),
+    el('div', { 'class': 't-cap', style: 'overflow-wrap:anywhere' }, [].concat(ds.recordIds.incidents, ds.recordIds.nearMisses, ds.recordIds.careLogs, ds.recordIds.overnightLogs, ds.recordIds.observations).join(', ') || '—'),
     ds.sourceIndex.length ? el('div', null, [ el('div', { 'class': 'an-sub', style: 'margin-top:10px' }, 'Sources'), rpTable([ '#', 'Source', 'Kind', 'About', 'Author', 'Content hash' ], ds.sourceIndex.map(function(s){ return [ 'S' + s.n, s.title, sumSourceLabel(s.kind), s.from ? fmtDate(s.from) + (s.to && s.to !== s.from ? ' – ' + fmtDate(s.to) : '') : '—', s.author || '—', { t: (s.sha256 || '').slice(0, 12), m: true } ]; })) ]) : null,
     ds.checks.length ? el('div', null, [ el('div', { 'class': 'an-sub', style: 'margin-top:10px' }, 'Checks recorded with this version'), rpTable([ 'Kind', 'Date', 'Detail' ], ds.checks.map(function(k){ return [ k.kind, k.date ? fmtDate(k.date) : '—', k.detail ]; })) ]) : null,
     el('div', { 'class': 'an-sub', style: 'margin-top:10px' }, 'Definitions (' + ds.version + ')'), rpTable([ 'Term', 'Definition' ], ds.definitions.map(function(r){ return [ r[0], r[1] ]; }))
@@ -5781,6 +5899,7 @@ var XP_TYPES = [
   { id: 'notes',     label: 'Shift notes',            help: 'Every progress note in the period. Each note starts on a new page under its date.' },
   { id: 'incidents', label: 'Incident reports',       help: 'Full form, all questions, with fall details. One report per page.' },
   { id: 'near',      label: 'Near misses',            help: 'One near miss record per page.' },
+  { id: 'care',      label: 'Personal care logs',     help: 'One shift\'s care log per page.' },
   { id: 'overnight', label: 'Overnight summaries',    help: 'One night per page (11pm–7am block figures).' },
   { id: 'summary',   label: 'Summary (analytics)',    help: 'The Summary tab figures and charts for the selected participant and period.' }
 ];
@@ -5843,8 +5962,8 @@ function xpLoad(o){
   var q = 'select=*&participant_id=eq.' + o.client;
   return Promise.all([
     sbSelAll('ac_shifts', 'select=*&client_id=eq.' + o.client + '&date=gte.' + o.from + '&date=lte.' + o.to),
-    sbSelAll('ac_note_entries', q), sbSelAll('ac_incident_forms', q), sbSelAll('ac_near_misses', q), sbSelAll('ac_overnight_logs', q)
-  ]).then(function(r){ state.xp = { key: o.client + '|' + o.from + '|' + o.to, shifts: r[0], notes: r[1], incidents: r[2], nearMisses: r[3], overnightLogs: r[4] }; });
+    sbSelAll('ac_note_entries', q), sbSelAll('ac_incident_forms', q), sbSelAll('ac_near_misses', q), sbSelAll('ac_care_logs', q), sbSelAll('ac_overnight_logs', q)
+  ]).then(function(r){ state.xp = { key: o.client + '|' + o.from + '|' + o.to, shifts: r[0], notes: r[1], incidents: r[2], nearMisses: r[3], careLogs: r[4], overnightLogs: r[5] }; });
 }
 
 function viewExport(main){
@@ -5881,6 +6000,7 @@ function viewExport(main){
     if (o.type === 'notes') forShift(X.notes, s).sort(function(a, b){ return a.created_at < b.created_at ? -1 : 1; }).forEach(function(n){ pages.push({ s: s, node: exportNote(n) }); });
     if (o.type === 'incidents') forShift(X.incidents, s).forEach(function(ir){ pages.push({ s: s, node: exportIncident(ir) }); });
     if (o.type === 'near') forShift(X.nearMisses, s).forEach(function(nm){ pages.push({ s: s, node: exportNearMiss(nm) }); });
+    if (o.type === 'care') forShift(X.careLogs, s).forEach(function(cl){ pages.push({ s: s, node: exportCareLog(cl) }); });
     if (o.type === 'overnight' && s.type === 'sleepover') forShift(X.overnightLogs, s).forEach(function(ol){ pages.push({ s: s, node: exportOvernight(ol) }); });
   });
   /* incidents and near misses with no shift attached still belong to the participant */
@@ -5978,6 +6098,17 @@ function exportNearMiss(nm){
    ['What nearly happened', nm.description], ['What stopped it becoming a fall', nm.prevented_by],
    ['Equipment contributed', yn(nm.equipment_factor) + (nm.equipment_factor && nm.equipment_desc ? '. ' + nm.equipment_desc : '')]
   ].forEach(function(r){ box.appendChild(xpRow(r[0], r[1])); });
+  return box;
+}
+function exportCareLog(l){
+  var box = el('div', { 'class': 'xp-rec xp-care' }, [ el('div', { 'class': 'xp-rec-h' }, 'Personal care log') ]);
+  var t = el('table', { 'class': 'xp-tbl xp-tbl-sm' });
+  [['Pad changes (wet)', l.pad_wet], ['Pad changes (bowel movement)', l.pad_bowel], ['Times found wet in bed', l.bed_wet], ['Bedding changes', l.bedding_changes],
+   ['Shower', l.shower_offered ? (l.shower_done === true ? 'Offered and done' : (l.shower_done === false ? 'Offered and declined' : 'Offered; outcome not recorded')) : 'Not offered this shift'],
+   ['Prompts before the shower was accepted', l.shower_offered ? l.shower_prompts : 'n/a'],
+   ['Other care refusals needing prompting', l.care_refusals], ['Assisted transfers', l.transfers], ['Transfers one worker could not do safely alone', l.transfer_unsafe_alone]
+  ].forEach(function(r){ t.appendChild(el('tr', null, [ el('td', null, r[0]), el('td', { 'class': 'n' }, String(r[1])) ])); });
+  box.appendChild(t);
   return box;
 }
 function exportOvernight(l){

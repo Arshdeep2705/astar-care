@@ -3,6 +3,7 @@ var XP_TYPES = [
   { id: 'notes',     label: 'Shift notes',            help: 'Every progress note in the period. Each note starts on a new page under its date.' },
   { id: 'incidents', label: 'Incident reports',       help: 'Full form, all questions, with fall details. One report per page.' },
   { id: 'near',      label: 'Near misses',            help: 'One near miss record per page.' },
+  { id: 'care',      label: 'Personal care logs',     help: 'One shift\'s care log per page.' },
   { id: 'overnight', label: 'Overnight summaries',    help: 'One night per page (11pm–7am block figures).' },
   { id: 'summary',   label: 'Summary (analytics)',    help: 'The Summary tab figures and charts for the selected participant and period.' }
 ];
@@ -65,8 +66,8 @@ function xpLoad(o){
   var q = 'select=*&participant_id=eq.' + o.client;
   return Promise.all([
     sbSelAll('ac_shifts', 'select=*&client_id=eq.' + o.client + '&date=gte.' + o.from + '&date=lte.' + o.to),
-    sbSelAll('ac_note_entries', q), sbSelAll('ac_incident_forms', q), sbSelAll('ac_near_misses', q), sbSelAll('ac_overnight_logs', q)
-  ]).then(function(r){ state.xp = { key: o.client + '|' + o.from + '|' + o.to, shifts: r[0], notes: r[1], incidents: r[2], nearMisses: r[3], overnightLogs: r[4] }; });
+    sbSelAll('ac_note_entries', q), sbSelAll('ac_incident_forms', q), sbSelAll('ac_near_misses', q), sbSelAll('ac_care_logs', q), sbSelAll('ac_overnight_logs', q)
+  ]).then(function(r){ state.xp = { key: o.client + '|' + o.from + '|' + o.to, shifts: r[0], notes: r[1], incidents: r[2], nearMisses: r[3], careLogs: r[4], overnightLogs: r[5] }; });
 }
 
 function viewExport(main){
@@ -103,6 +104,7 @@ function viewExport(main){
     if (o.type === 'notes') forShift(X.notes, s).sort(function(a, b){ return a.created_at < b.created_at ? -1 : 1; }).forEach(function(n){ pages.push({ s: s, node: exportNote(n) }); });
     if (o.type === 'incidents') forShift(X.incidents, s).forEach(function(ir){ pages.push({ s: s, node: exportIncident(ir) }); });
     if (o.type === 'near') forShift(X.nearMisses, s).forEach(function(nm){ pages.push({ s: s, node: exportNearMiss(nm) }); });
+    if (o.type === 'care') forShift(X.careLogs, s).forEach(function(cl){ pages.push({ s: s, node: exportCareLog(cl) }); });
     if (o.type === 'overnight' && s.type === 'sleepover') forShift(X.overnightLogs, s).forEach(function(ol){ pages.push({ s: s, node: exportOvernight(ol) }); });
   });
   /* incidents and near misses with no shift attached still belong to the participant */
@@ -200,6 +202,17 @@ function exportNearMiss(nm){
    ['What nearly happened', nm.description], ['What stopped it becoming a fall', nm.prevented_by],
    ['Equipment contributed', yn(nm.equipment_factor) + (nm.equipment_factor && nm.equipment_desc ? '. ' + nm.equipment_desc : '')]
   ].forEach(function(r){ box.appendChild(xpRow(r[0], r[1])); });
+  return box;
+}
+function exportCareLog(l){
+  var box = el('div', { 'class': 'xp-rec xp-care' }, [ el('div', { 'class': 'xp-rec-h' }, 'Personal care log') ]);
+  var t = el('table', { 'class': 'xp-tbl xp-tbl-sm' });
+  [['Pad changes (wet)', l.pad_wet], ['Pad changes (bowel movement)', l.pad_bowel], ['Times found wet in bed', l.bed_wet], ['Bedding changes', l.bedding_changes],
+   ['Shower', l.shower_offered ? (l.shower_done === true ? 'Offered and done' : (l.shower_done === false ? 'Offered and declined' : 'Offered; outcome not recorded')) : 'Not offered this shift'],
+   ['Prompts before the shower was accepted', l.shower_offered ? l.shower_prompts : 'n/a'],
+   ['Other care refusals needing prompting', l.care_refusals], ['Assisted transfers', l.transfers], ['Transfers one worker could not do safely alone', l.transfer_unsafe_alone]
+  ].forEach(function(r){ t.appendChild(el('tr', null, [ el('td', null, r[0]), el('td', { 'class': 'n' }, String(r[1])) ])); });
+  box.appendChild(t);
   return box;
 }
 function exportOvernight(l){

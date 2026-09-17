@@ -411,10 +411,11 @@ function openAdminShift(s){
   }
   /* evidence logs */
   {
-    var nms = nearMissesForShift(s.id), ol = overnightLogForShift(s.id);
+    var nms = nearMissesForShift(s.id), cl = careLogForShift(s.id), ol = overnightLogForShift(s.id);
     body.appendChild(el('div', { 'class': 't-label', style: 'margin:16px 0 8px' }, 'Evidence logs'));
     body.appendChild(el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, [
       el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openNearMissModal({ shift: s, worker: w || me() }); } }, 'Near miss' + (nms.length ? ' (' + nms.length + ')' : '')),
+      el('button', { 'class': 'btn btn-sm ' + (cl ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openCareLogModal({ shift: s, worker: w || me() }); } }, cl ? 'Care log ✓' : 'Care log'),
       s.type === 'sleepover' ? el('button', { 'class': 'btn btn-sm ' + (ol ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openOvernightModal({ shift: s, worker: w || me() }); } }, ol ? 'Overnight ✓' : 'Overnight summary') : null
     ]));
     nms.forEach(function(nm){

@@ -31,11 +31,13 @@ function statusChip(label, state){ /* state: done | missing | na | pending */
 function recordStatusRow(s){
   var ended = shiftEnded(s);
   var note = shiftNotesForShift(s.id).length > 0;
+  var care = !!careLogForShift(s.id);
   var on = s.type === 'sleepover' ? !!overnightLogForShift(s.id) : null;
   var inc = incidentsForShift(s.id).length;
   var nm = nearMissesForShift(s.id).length;
   var row = el('div', { 'class': 'nc-status' }, [
     statusChip(note ? 'Shift note saved' : (ended ? 'Shift note missing' : 'Shift note not yet due'), note ? 'done' : (ended ? 'missing' : 'na')),
+    statusChip(care ? 'Care log saved' : (ended ? 'Care log missing' : 'Care log'), care ? 'done' : (ended ? 'missing' : 'na')),
     on === null ? null : statusChip(on ? 'Overnight summary saved' : (ended ? 'Overnight summary missing' : 'Overnight summary'), on ? 'done' : (ended ? 'missing' : 'na')),
     inc ? statusChip(inc + ' incident report' + (inc === 1 ? '' : 's'), 'done') : null,
     nm ? statusChip(nm + ' near miss' + (nm === 1 ? '' : 'es'), 'done') : null
@@ -61,9 +63,10 @@ function nowCard(s, w, kind){
     card.appendChild(clockRow);
   }
   card.appendChild(recordStatusRow(s));
-  var onLog = overnightLogForShift(s.id);
+  var careLog = careLogForShift(s.id), onLog = overnightLogForShift(s.id);
   card.appendChild(el('div', { 'class': 'nc-actions' }, [
     el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(){ openNoteModal({ shift: s, worker: w }); } }, [svgIcon(IC.plus), shiftNotesForShift(s.id).length ? 'Add another note' : 'Write the shift note']),
+    el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openCareLogModal({ shift: s, worker: w }); } }, careLog ? 'Edit care log' : 'Care log'),
     s.type === 'sleepover' ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openOvernightModal({ shift: s, worker: w }); } }, onLog ? 'Edit overnight summary' : 'Overnight summary') : null,
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openIncidentModal({ shift: s, worker: w }); } }, 'Incident report'),
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openNearMissModal({ shift: s, worker: w }); } }, 'Near miss')
@@ -274,11 +277,13 @@ function shiftCard(s, w, opts){
   card.appendChild(recordStatusRow(s));
   /* actions */
   var nearMisses = nearMissesForShift(s.id);
+  var careLog = careLogForShift(s.id);
   var onLog = overnightLogForShift(s.id);
   card.appendChild(el('div', { 'class': 'sc-actions', style: 'flex-wrap:wrap' }, [
     el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(){ openNoteModal({ shift: s, worker: w }); } }, [svgIcon(IC.plus), 'Add note']),
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openIncidentModal({ shift: s, worker: w }); } }, 'Incident report'),
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openNearMissModal({ shift: s, worker: w }); } }, 'Near miss'),
+    el('button', { 'class': 'btn btn-sm ' + (careLog ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openCareLogModal({ shift: s, worker: w }); } }, careLog ? 'Care log ✓' : 'Care log'),
     s.type === 'sleepover' ? el('button', { 'class': 'btn btn-sm ' + (onLog ? 'btn-ghost' : 'btn-sec'), onclick: function(){ openOvernightModal({ shift: s, worker: w }); } }, onLog ? 'Overnight ✓' : 'Overnight summary') : null
   ]));
 

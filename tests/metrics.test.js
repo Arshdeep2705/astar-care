@@ -8,7 +8,7 @@ function eq(name, got, want){ n++; var ok = JSON.stringify(got) === JSON.stringi
 var C = { id: 'c-test', name: 'Test Participant (synthetic)' };
 var NOW = '2030-03-20T12:00:00';
 function shift(id, date, type){ return { id: id, client_id: C.id, date: date, type: type, start_t: type === 'sleepover' ? '18:00' : '09:00', end_t: type === 'sleepover' ? '09:00' : '18:00', worker_id: 'w1' }; }
-function build(over){ var inp = { client: C, from: '2030-03-01', to: '2030-03-14', now: NOW, shifts: [], incidents: [], nearMisses: [], overnightLogs: [], notes: [], sources: [], observations: [] }; Object.keys(over).forEach(function(k){ inp[k] = over[k]; }); return M.evBuildDataset(inp); }
+function build(over){ var inp = { client: C, from: '2030-03-01', to: '2030-03-14', now: NOW, shifts: [], incidents: [], nearMisses: [], careLogs: [], overnightLogs: [], notes: [], sources: [], observations: [] }; Object.keys(over).forEach(function(k){ inp[k] = over[k]; }); return M.evBuildDataset(inp); }
 var nights = []; for (var i = 1; i <= 14; i++) nights.push(shift('n' + i, '2030-03-' + (i < 10 ? '0' : '') + i, 'sleepover'));
 var daysS = []; for (i = 1; i <= 14; i++) daysS.push(shift('d' + i, '2030-03-' + (i < 10 ? '0' : '') + i, 'day'));
 var src = [{ id: 's1', participant_id: C.id, kind: 'upload', title: 'Synthetic PDF', excluded: false, sha256: 'aaa', created_at: '2030-03-15T00:00:00Z' }];
@@ -45,13 +45,15 @@ eq('5 a summary without hours is partial and excluded from the average', [ds5.ov
 eq('6 a missing night is status missing with null assistance, and the average ignores it', [ds5.overnight.rows[0].status, ds5.overnight.rows[0].assistHours, ds5.overnight.avgAssist.hours, ds5.overnight.missing], ['missing', null, 1.5, 12]);
 eq('6b nights not yet finished are not "not recorded"', build({ shifts: nights.concat([shift('n99', '2030-03-14', 'sleepover')]), now: '2030-03-14T20:00:00' }).overnight.notYet >= 1, true);
 
-/* 7. assisted transfers come only from accepted transfer observations (the personal care log was retired 17 Sep 2026) */
-var ds7 = build({ shifts: daysS, observations: [
-  { id: 'o1', participant_id: C.id, status: 'accepted', category: 'daytime_task', assist_type: 'Transfer', obs_date: '2030-03-03', start_time: '10:30' },
-  { id: 'o2', participant_id: C.id, status: 'accepted', category: 'daytime_task', assist_type: 'Transfer', obs_date: '2030-03-03', start_time: '14:00' },
-  { id: 'o3', participant_id: C.id, status: 'proposed', category: 'daytime_task', assist_type: 'Transfer', obs_date: '2030-03-04', start_time: '10:00' } ] });
-eq('7 two accepted transfers on one day count; the proposed one does not', [ds7.metrics.transfers.value, ds7.transfers.days, ds7.series.buckets.filter(function(b){ return b.key === '2030-03-03'; })[0].transfers], [2, 1, 2]);
-eq('7b no accepted transfer observations: the metric is not recorded, and the dataset has no care-log figures', [build({ shifts: daysS }).metrics.transfers.value, 'care' in build({ shifts: daysS })], [null, false]);
+/* 7. an unanswered care measure is not zero */
+var ds7 = build({ shifts: daysS, careLogs: [{ id: 'c1', shift_id: 'd1', pad_wet: 3, pad_bowel: null, transfers: null, shower_offered: true, shower_done: true, created_at: '2030-03-01T20:00:00Z' }, { id: 'c2', shift_id: 'd2', pad_wet: null, pad_bowel: null, transfers: null, shower_offered: false, created_at: '2030-03-02T20:00:00Z' }] });
+eq('7 blank pad_bowel: total null (not 0), recorded 0 of 2', [ds7.care.measures[1].total, ds7.care.measures[1].recorded, ds7.care.measures[1].perDay], [null, 0, null]);
+eq('7b transfers unanswered everywhere → metric is not recorded', ds7.metrics.transfers.value, null);
+eq('7c per-day divides by days with the measure recorded (1), not days with a log (2)', [ds7.care.measures[0].perDay, ds7.care.measures[0].days], [3, 1]);
+
+/* 8. an incomplete shower record is not a refusal */
+var ds8 = build({ shifts: daysS, careLogs: [{ id: 'c3', shift_id: 'd3', shower_offered: true, shower_done: null, pad_wet: 1, transfers: 4, created_at: '2030-03-03T20:00:00Z' }, { id: 'c4', shift_id: 'd4', shower_offered: true, shower_done: false, pad_wet: 1, transfers: 4, created_at: '2030-03-04T20:00:00Z' }] });
+eq('8 offered + unanswered = outcome not recorded; offered + false = declined', [ds8.care.showers.offered, ds8.care.showers.done, ds8.care.showers.declined, ds8.care.showers.outcomeNotRecorded], [2, 0, 1, 1]);
 
 /* 9 + 10. daytime activities stay on their date; after-midnight overnight events join the previous night */
 var cands = M.evFindCandidates('At 10:30am the worker assisted the participant to the toilet. At about 1:00am he woke wet and was changed. At 3:15pm he did not fall while transferring to the car.', { baseDate: '2030-03-03', overnight: true });
@@ -82,11 +84,11 @@ eq('14 export metrics come from the same dataset values', [ex.metrics[0].value, 
 /* 15. long periods: weekly buckets cover the whole range, nothing dropped */
 var longShifts = []; for (i = 0; i < 120; i++) longShifts.push(shift('L' + i, M.evNightOf({ obs_date: '2029-11-01' }) && require('../parts/p9a_metrics.js') && addD('2029-11-01', i), 'day'));
 function addD(d, k){ var p = d.split('-'); var dt = new Date(+p[0], +p[1] - 1, +p[2] + k); return dt.getFullYear() + '-' + (dt.getMonth() < 9 ? '0' : '') + (dt.getMonth() + 1) + '-' + (dt.getDate() < 10 ? '0' : '') + dt.getDate(); }
-var ds15 = M.evBuildDataset({ client: C, from: '2029-11-01', to: '2030-02-28', now: NOW, shifts: longShifts, incidents: [], nearMisses: [], overnightLogs: [], notes: [], sources: [], observations: [] });
+var ds15 = M.evBuildDataset({ client: C, from: '2029-11-01', to: '2030-02-28', now: NOW, shifts: longShifts, incidents: [], nearMisses: [], careLogs: [], overnightLogs: [], notes: [], sources: [], observations: [] });
 eq('15 120 shifts over 4 months: all in scope, weekly buckets span the period', [ds15.coverage.shifts.rostered, ds15.series.mode, ds15.series.buckets.length >= 17, ds15.series.buckets.reduce(function(a, b){ return a + b.shifts; }, 0)], [120, 'week', true, 120]);
 
 /* 16. a finalised dataset does not change when sources are added later (the export reads only the dataset) */
-var inp16 = { client: C, from: '2030-03-01', to: '2030-03-14', now: NOW, shifts: daysS, incidents: [fallReport], nearMisses: [], overnightLogs: [], notes: [], sources: src.slice(), observations: [] };
+var inp16 = { client: C, from: '2030-03-01', to: '2030-03-14', now: NOW, shifts: daysS, incidents: [fallReport], nearMisses: [], careLogs: [], overnightLogs: [], notes: [], sources: src.slice(), observations: [] };
 var frozen = JSON.stringify(M.evBuildDataset(inp16));
 inp16.sources.push({ id: 's2', participant_id: C.id, kind: 'upload', title: 'Later upload', excluded: false, sha256: 'bbb' });
 inp16.observations.push({ id: 'late', participant_id: C.id, source_id: 's2', obs_date: '2030-03-07', start_time: '10:00', category: 'incident', assist_type: 'Fall', status: 'accepted' });
@@ -118,7 +120,7 @@ var demo = M.evDemoDataset('2030-05-01', '2030-05-28');
 var realIds = ['aaaa3333', 'Tim', 'Allan', 'Nick', 'Weir Views', 'Bundoora', 'Ivanhoe'];
 var blob = JSON.stringify(demo);
 eq('20 demo participant is synthetic and no real name/address/id appears', [demo.client.id, realIds.filter(function(x){ return blob.indexOf(x) >= 0; })], ['demo-participant', []]);
-eq('20b demo builds a full dataset with all record kinds', (function(){ var d = M.evBuildDataset(Object.assign({ from: '2030-05-01', to: '2030-05-28', tz: 'Australia/Melbourne' }, demo)); return [d.coverage.shifts.rostered > 0, d.overnight.inScope > 0, d.incidents.n >= 0]; })(), [true, true, true]);
+eq('20b demo builds a full dataset with all record kinds', (function(){ var d = M.evBuildDataset(Object.assign({ from: '2030-05-01', to: '2030-05-28', tz: 'Australia/Melbourne' }, demo)); return [d.coverage.shifts.rostered > 0, d.overnight.inScope > 0, d.incidents.n >= 0, d.care.logs > 0]; })(), [true, true, true, true]);
 
 /* extra: daylight-saving night length is taken from the clock, not assumed to be 8 */
 eq('DST spring-forward night (4 Oct 2026, Melbourne) has a 7 h window; an ordinary night 8 h', [M.evBlockHours('2026-10-03'), M.evBlockHours('2026-09-15')], [7, 8]);
