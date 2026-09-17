@@ -75,7 +75,7 @@ Counts, days with a record, equipment involvement and transfer state as recorded
 
 ## Personal care
 
-Totals and per-day are over the logs that answered the measure; per-day divides by days with that measure recorded. Showers: offered / done / declined / outcome not recorded (offered with no completion answer, or a pre-cutoff `false`).
+Totals and per-day are over the logs that answered the measure; per-day divides by days with that measure recorded. The shower questions were retired on 2026-09-17 (owner decision): showers are described in the shift note only, the `shower_*` columns stay for old rows and no figure is derived from them.
 
 ## Versions
 

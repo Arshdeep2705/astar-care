@@ -46,14 +46,14 @@ eq('6 a missing night is status missing with null assistance, and the average ig
 eq('6b nights not yet finished are not "not recorded"', build({ shifts: nights.concat([shift('n99', '2030-03-14', 'sleepover')]), now: '2030-03-14T20:00:00' }).overnight.notYet >= 1, true);
 
 /* 7. an unanswered care measure is not zero */
-var ds7 = build({ shifts: daysS, careLogs: [{ id: 'c1', shift_id: 'd1', pad_wet: 3, pad_bowel: null, transfers: null, shower_offered: true, shower_done: true, created_at: '2030-03-01T20:00:00Z' }, { id: 'c2', shift_id: 'd2', pad_wet: null, pad_bowel: null, transfers: null, shower_offered: false, created_at: '2030-03-02T20:00:00Z' }] });
+var ds7 = build({ shifts: daysS, careLogs: [{ id: 'c1', shift_id: 'd1', pad_wet: 3, pad_bowel: null, transfers: null, created_at: '2030-03-01T20:00:00Z' }, { id: 'c2', shift_id: 'd2', pad_wet: null, pad_bowel: null, transfers: null, created_at: '2030-03-02T20:00:00Z' }] });
 eq('7 blank pad_bowel: total null (not 0), recorded 0 of 2', [ds7.care.measures[1].total, ds7.care.measures[1].recorded, ds7.care.measures[1].perDay], [null, 0, null]);
 eq('7b transfers unanswered everywhere → metric is not recorded', ds7.metrics.transfers.value, null);
 eq('7c per-day divides by days with the measure recorded (1), not days with a log (2)', [ds7.care.measures[0].perDay, ds7.care.measures[0].days], [3, 1]);
 
-/* 8. an incomplete shower record is not a refusal */
+/* 8. shower questions were retired 17 Sep 2026: old rows with shower answers still count for everything else and expose no shower figures */
 var ds8 = build({ shifts: daysS, careLogs: [{ id: 'c3', shift_id: 'd3', shower_offered: true, shower_done: null, pad_wet: 1, transfers: 4, created_at: '2030-03-03T20:00:00Z' }, { id: 'c4', shift_id: 'd4', shower_offered: true, shower_done: false, pad_wet: 1, transfers: 4, created_at: '2030-03-04T20:00:00Z' }] });
-eq('8 offered + unanswered = outcome not recorded; offered + false = declined', [ds8.care.showers.offered, ds8.care.showers.done, ds8.care.showers.declined, ds8.care.showers.outcomeNotRecorded], [2, 0, 1, 1]);
+eq('8 old shower answers are ignored; pad changes and transfers still count', [ds8.care.showers, ds8.care.measures[0].total, ds8.metrics.transfers.value], [undefined, 2, 8]);
 
 /* 9 + 10. daytime activities stay on their date; after-midnight overnight events join the previous night */
 var cands = M.evFindCandidates('At 10:30am the worker assisted the participant to the toilet. At about 1:00am he woke wet and was changed. At 3:15pm he did not fall while transferring to the car.', { baseDate: '2030-03-03', overnight: true });

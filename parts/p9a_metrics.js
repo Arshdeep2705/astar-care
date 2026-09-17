@@ -27,7 +27,6 @@ var EV_DEFINITIONS = [
   ['Wakes', 'The overnight summary’s wake count is the number of times the participant woke needing support BEFORE the wake they got up for the day. The final wake is not included. A wake is not the same as an assistance episode; one wake can involve several activities.'],
   ['Assisted transfers', 'From the personal care log’s structured count. On a day with no care log, individually reviewed transfer observations are counted instead; the same day is never counted from both. Mentions of a wheelchair in prose are not transfers.'],
   ['Care measures', 'Total and per-day are computed only over the logs that answered that measure; per-day divides by the number of days with that measure recorded. Logs saved before 7 September 2026 stored blank answers as 0 and are listed under checks.'],
-  ['Showers', '“Offered” is what the worker recorded. “Done” and “declined” are recorded answers; a shower recorded as offered with no completion answer is shown as “outcome not recorded”, not as declined.'],
   ['Incidents', 'Falls are incidents the worker recorded as a fall. “Involving an emergency call” counts incidents where any emergency service was recorded as called; the form does not record how many calls or whether the service attended. Injuries: the worker’s answer; no answer = unknown.'],
   ['Locations and activities', 'Location is where the record says it happened. Whether a transfer was in progress is the worker’s answer to that question; for records made before the question existed (before 9 September 2026) a transfer is inferred only when the recorded location itself names a transfer, and those rows are marked as inferred.'],
   ['Excluded material', 'Sources marked excluded (training samples, generated examples) and observations that are proposed or rejected never enter any figure. Demonstration mode uses an entirely synthetic participant.']
@@ -221,7 +220,6 @@ function evBuildDataset(inp){
     var nd = Object.keys(recDays).length;
     return { key: key, label: label, total: rec.length ? evSum(rec.map(function(l){ return +l[key]; })) : null, recorded: rec.length, of: care.length, days: nd, perDay: nd ? evRound(evSum(rec.map(function(l){ return +l[key]; })) / nd) : null, preNullZero: rec.filter(function(l){ return evIsPreNullRow(l) && l[key] === 0; }).length };
   }
-  var showers = care.filter(function(l){ return l.shower_offered === true; });
   var transferObs = obs.filter(function(o){ return o.category === 'daytime_task' && /transfer/i.test(o.assist_type || ''); });
   var tMeasure = measure('transfers', 'Assisted transfers');
   var transferDays = {}; care.filter(function(l){ return l.transfers != null; }).forEach(function(l){ transferDays[byId[l.shift_id].date] = 1; });
@@ -232,9 +230,6 @@ function evBuildDataset(inp){
     measures: [ measure('pad_wet', 'Pad changes (wet)'), measure('pad_bowel', 'Pad changes (bowel)'), measure('bed_wet', 'Found wet in bed'), measure('bedding_changes', 'Bedding changes'), measure('care_refusals', 'Care refusals needing prompting') ],
     transfers: { logged: tMeasure.total, loggedRecorded: tMeasure.recorded, loggedOf: tMeasure.of, loggedDays: tMeasure.days, perDay: tMeasure.perDay, fromObservations: transfersFromObs, observationDays: Object.keys(obsOnlyDays).length, observationEvents: transferObs.length,
       total: (tMeasure.total == null && !transfersFromObs) ? null : (tMeasure.total || 0) + transfersFromObs },
-    showers: { offered: showers.length, done: showers.filter(function(l){ return l.shower_done === true; }).length, declined: showers.filter(function(l){ return l.shower_done === false && !evIsPreNullRow(l); }).length,
-      outcomeNotRecorded: showers.filter(function(l){ return l.shower_done == null || (l.shower_done === false && evIsPreNullRow(l)); }).length,
-      promptsAvg: (function(){ var a = showers.filter(function(l){ return l.shower_prompts != null; }).map(function(l){ return +l.shower_prompts; }); return a.length ? evRound(evAvg(a)) : null; })(), promptsN: showers.filter(function(l){ return l.shower_prompts != null; }).length },
     dailyTransfers: Object.keys(careByDate).sort().map(function(d){ var v = careByDate[d].filter(function(l){ return l.transfers != null; }); return { date: d, transfers: v.length ? evSum(v.map(function(l){ return +l.transfers; })) : null, logs: careByDate[d].length }; })
   };
 
@@ -363,7 +358,7 @@ function evDemoDataset(from, to){
     var night = { id: 'demo-s-' + n + 'n', client_id: c.id, date: d, type: 'sleepover', start_t: '18:00', end_t: '09:00', worker_id: 'demo-w2', created_at: d + 'T00:00:00Z' };
     shifts.push(day, night);
     var r = rnd();
-    if (r > 0.25) careLogs.push({ id: 'demo-c-' + n, shift_id: day.id, participant_id: c.id, pad_wet: Math.floor(rnd() * 3) + 1, pad_bowel: rnd() > 0.5 ? 1 : 0, bed_wet: rnd() > 0.7 ? 1 : 0, bedding_changes: rnd() > 0.7 ? 1 : 0, shower_offered: true, shower_done: rnd() > 0.3 ? true : (rnd() > 0.5 ? false : null), shower_prompts: Math.floor(rnd() * 4), care_refusals: Math.floor(rnd() * 2), transfers: 6 + Math.floor(rnd() * 8), created_at: d + 'T18:30:00Z' });
+    if (r > 0.25) careLogs.push({ id: 'demo-c-' + n, shift_id: day.id, participant_id: c.id, pad_wet: Math.floor(rnd() * 3) + 1, pad_bowel: rnd() > 0.5 ? 1 : 0, bed_wet: rnd() > 0.7 ? 1 : 0, bedding_changes: rnd() > 0.7 ? 1 : 0, care_refusals: Math.floor(rnd() * 2), transfers: 6 + Math.floor(rnd() * 8), created_at: d + 'T18:30:00Z' });
     var r2 = rnd();
     if (r2 > 0.3) { var active = evRound(Math.floor(rnd() * 16) * 0.25); overnightLogs.push({ id: 'demo-o-' + n, shift_id: night.id, participant_id: c.id, bed_time: rnd() > 0.5 ? '20:30' : '21:15', wake_time: rnd() > 0.5 ? '03:30' : '05:45', wakes: Math.floor(rnd() * 3), asleep_hours: evRound(Math.max(0, 8 - active - Math.floor(rnd() * 4) * 0.25)), active_hours: active, created_at: evAddDays(d, 1) + 'T09:30:00Z' }); }
     else if (r2 > 0.15) overnightLogs.push({ id: 'demo-o-' + n, shift_id: night.id, participant_id: c.id, bed_time: '21:00', wake_time: null, wakes: null, asleep_hours: null, active_hours: null, created_at: evAddDays(d, 1) + 'T09:30:00Z' });

@@ -552,7 +552,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260917124653';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260917131653';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -4549,32 +4549,22 @@ function openCareLogModal(opts){
   function keep(v){ return v == null ? '' : v; }
   var f = {
     pad_wet: ex ? keep(ex.pad_wet) : '', pad_bowel: ex ? keep(ex.pad_bowel) : '', bed_wet: ex ? keep(ex.bed_wet) : '', bedding_changes: ex ? keep(ex.bedding_changes) : '',
-    shower_offered: ex ? (ex.shower_offered ? 'Yes' : 'No') : '',
-    shower_done: ex ? (ex.shower_done ? 'Yes' : 'No') : '',
-    shower_prompts: ex ? keep(ex.shower_prompts) : '',
     care_refusals: ex ? keep(ex.care_refusals) : '', transfers: ex ? keep(ex.transfers) : '', transfer_unsafe_alone: ex ? keep(ex.transfer_unsafe_alone) : ''
   };
-  var showerDet = el('div', { style: f.shower_offered === 'No' ? 'display:none' : '' }, [
-    evYesNo(f, 'shower_done', 'Was the shower done?'),
-    evNum(f, 'shower_prompts', 'How many prompts before ' + who + ' agreed to the shower', 'Count each time it was offered or ' + who + ' was encouraged before accepting. If the shower was declined altogether, enter the number of prompts made.')
-  ]);
+  /* shower questions retired 17 Sep 2026 (owner): showers are described in the note, not counted here */
   var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
   var saveBtn = el('button', { 'class': 'btn btn-pri', onclick: save }, ex ? 'Save changes' : 'Save care log');
   function fail(msg){ errBox.style.display = 'block'; errBox.textContent = msg; busyBtn(saveBtn, false); }
   function save(){
     if (f.pad_wet === '' && f.pad_bowel === '' && f.transfers === '') return fail('Enter at least the pad changes and transfers for this shift. Type 0 if there were none; leave a box empty only if you did not observe it.');
-    if (f.shower_offered === '') return fail('Say whether a shower was offered this shift.');
-    if (f.shower_offered === 'Yes' && f.shower_done === '') return fail('Say whether the shower was done.');
     errBox.style.display = 'none';
     busyBtn(saveBtn, true);
     var rec = {
       pad_wet: evIntOrNull(f.pad_wet), pad_bowel: evIntOrNull(f.pad_bowel), bed_wet: evIntOrNull(f.bed_wet), bedding_changes: evIntOrNull(f.bedding_changes),
-      shower_offered: f.shower_offered === 'Yes', shower_done: f.shower_offered === 'Yes' && f.shower_done === 'Yes',
-      shower_prompts: f.shower_offered === 'Yes' ? evIntOrNull(f.shower_prompts) : null,
       care_refusals: evIntOrNull(f.care_refusals), transfers: evIntOrNull(f.transfers), transfer_unsafe_alone: evIntOrNull(f.transfer_unsafe_alone),
       updated_at: new Date().toISOString()
     };
-    var zeroKeys = ['pad_wet','pad_bowel','bed_wet','bedding_changes','shower_prompts','care_refusals','transfers','transfer_unsafe_alone'];
+    var zeroKeys = ['pad_wet','pad_bowel','bed_wet','bedding_changes','care_refusals','transfers','transfer_unsafe_alone'];
     var p;
     if (ex) p = evSaveWithNullFallback(function(r){ return sbUpd('ac_care_logs', 'id=eq.' + ex.id, r); }, rec, zeroKeys);
     else { rec.shift_id = shift.id; rec.participant_id = shift.client_id; rec.worker_id = worker ? worker.id : null; delete rec.updated_at; p = evSaveWithNullFallback(function(r){ return sbIns('ac_care_logs', [r]); }, rec, zeroKeys); }
@@ -4591,9 +4581,6 @@ function openCareLogModal(opts){
       evNum(f, 'bed_wet', 'Times found wet in bed'),
       evNum(f, 'bedding_changes', 'Bedding changes')
     ]),
-    el('div', { 'class': 't-label', style: 'margin:6px 0 8px' }, 'Shower'),
-    evYesNo(f, 'shower_offered', 'Was a shower offered this shift?', function(){ showerDet.style.display = f.shower_offered === 'No' ? 'none' : ''; }),
-    showerDet,
     el('div', { 'class': 't-label', style: 'margin:6px 0 8px' }, 'Refusals and manual handling'),
     evNum(f, 'care_refusals', 'Other care refusals needing prompting', 'Times ' + who + ' declined personal care (pad change, clothing change, toileting) and had to be prompted before accepting.'),
     el('div', { 'class': 'grid2' }, [
@@ -4848,7 +4835,6 @@ var EV_DEFINITIONS = [
   ['Wakes', 'The overnight summary’s wake count is the number of times the participant woke needing support BEFORE the wake they got up for the day. The final wake is not included. A wake is not the same as an assistance episode; one wake can involve several activities.'],
   ['Assisted transfers', 'From the personal care log’s structured count. On a day with no care log, individually reviewed transfer observations are counted instead; the same day is never counted from both. Mentions of a wheelchair in prose are not transfers.'],
   ['Care measures', 'Total and per-day are computed only over the logs that answered that measure; per-day divides by the number of days with that measure recorded. Logs saved before 7 September 2026 stored blank answers as 0 and are listed under checks.'],
-  ['Showers', '“Offered” is what the worker recorded. “Done” and “declined” are recorded answers; a shower recorded as offered with no completion answer is shown as “outcome not recorded”, not as declined.'],
   ['Incidents', 'Falls are incidents the worker recorded as a fall. “Involving an emergency call” counts incidents where any emergency service was recorded as called; the form does not record how many calls or whether the service attended. Injuries: the worker’s answer; no answer = unknown.'],
   ['Locations and activities', 'Location is where the record says it happened. Whether a transfer was in progress is the worker’s answer to that question; for records made before the question existed (before 9 September 2026) a transfer is inferred only when the recorded location itself names a transfer, and those rows are marked as inferred.'],
   ['Excluded material', 'Sources marked excluded (training samples, generated examples) and observations that are proposed or rejected never enter any figure. Demonstration mode uses an entirely synthetic participant.']
@@ -5042,7 +5028,6 @@ function evBuildDataset(inp){
     var nd = Object.keys(recDays).length;
     return { key: key, label: label, total: rec.length ? evSum(rec.map(function(l){ return +l[key]; })) : null, recorded: rec.length, of: care.length, days: nd, perDay: nd ? evRound(evSum(rec.map(function(l){ return +l[key]; })) / nd) : null, preNullZero: rec.filter(function(l){ return evIsPreNullRow(l) && l[key] === 0; }).length };
   }
-  var showers = care.filter(function(l){ return l.shower_offered === true; });
   var transferObs = obs.filter(function(o){ return o.category === 'daytime_task' && /transfer/i.test(o.assist_type || ''); });
   var tMeasure = measure('transfers', 'Assisted transfers');
   var transferDays = {}; care.filter(function(l){ return l.transfers != null; }).forEach(function(l){ transferDays[byId[l.shift_id].date] = 1; });
@@ -5053,9 +5038,6 @@ function evBuildDataset(inp){
     measures: [ measure('pad_wet', 'Pad changes (wet)'), measure('pad_bowel', 'Pad changes (bowel)'), measure('bed_wet', 'Found wet in bed'), measure('bedding_changes', 'Bedding changes'), measure('care_refusals', 'Care refusals needing prompting') ],
     transfers: { logged: tMeasure.total, loggedRecorded: tMeasure.recorded, loggedOf: tMeasure.of, loggedDays: tMeasure.days, perDay: tMeasure.perDay, fromObservations: transfersFromObs, observationDays: Object.keys(obsOnlyDays).length, observationEvents: transferObs.length,
       total: (tMeasure.total == null && !transfersFromObs) ? null : (tMeasure.total || 0) + transfersFromObs },
-    showers: { offered: showers.length, done: showers.filter(function(l){ return l.shower_done === true; }).length, declined: showers.filter(function(l){ return l.shower_done === false && !evIsPreNullRow(l); }).length,
-      outcomeNotRecorded: showers.filter(function(l){ return l.shower_done == null || (l.shower_done === false && evIsPreNullRow(l)); }).length,
-      promptsAvg: (function(){ var a = showers.filter(function(l){ return l.shower_prompts != null; }).map(function(l){ return +l.shower_prompts; }); return a.length ? evRound(evAvg(a)) : null; })(), promptsN: showers.filter(function(l){ return l.shower_prompts != null; }).length },
     dailyTransfers: Object.keys(careByDate).sort().map(function(d){ var v = careByDate[d].filter(function(l){ return l.transfers != null; }); return { date: d, transfers: v.length ? evSum(v.map(function(l){ return +l.transfers; })) : null, logs: careByDate[d].length }; })
   };
 
@@ -5184,7 +5166,7 @@ function evDemoDataset(from, to){
     var night = { id: 'demo-s-' + n + 'n', client_id: c.id, date: d, type: 'sleepover', start_t: '18:00', end_t: '09:00', worker_id: 'demo-w2', created_at: d + 'T00:00:00Z' };
     shifts.push(day, night);
     var r = rnd();
-    if (r > 0.25) careLogs.push({ id: 'demo-c-' + n, shift_id: day.id, participant_id: c.id, pad_wet: Math.floor(rnd() * 3) + 1, pad_bowel: rnd() > 0.5 ? 1 : 0, bed_wet: rnd() > 0.7 ? 1 : 0, bedding_changes: rnd() > 0.7 ? 1 : 0, shower_offered: true, shower_done: rnd() > 0.3 ? true : (rnd() > 0.5 ? false : null), shower_prompts: Math.floor(rnd() * 4), care_refusals: Math.floor(rnd() * 2), transfers: 6 + Math.floor(rnd() * 8), created_at: d + 'T18:30:00Z' });
+    if (r > 0.25) careLogs.push({ id: 'demo-c-' + n, shift_id: day.id, participant_id: c.id, pad_wet: Math.floor(rnd() * 3) + 1, pad_bowel: rnd() > 0.5 ? 1 : 0, bed_wet: rnd() > 0.7 ? 1 : 0, bedding_changes: rnd() > 0.7 ? 1 : 0, care_refusals: Math.floor(rnd() * 2), transfers: 6 + Math.floor(rnd() * 8), created_at: d + 'T18:30:00Z' });
     var r2 = rnd();
     if (r2 > 0.3) { var active = evRound(Math.floor(rnd() * 16) * 0.25); overnightLogs.push({ id: 'demo-o-' + n, shift_id: night.id, participant_id: c.id, bed_time: rnd() > 0.5 ? '20:30' : '21:15', wake_time: rnd() > 0.5 ? '03:30' : '05:45', wakes: Math.floor(rnd() * 3), asleep_hours: evRound(Math.max(0, 8 - active - Math.floor(rnd() * 4) * 0.25)), active_hours: active, created_at: evAddDays(d, 1) + 'T09:30:00Z' }); }
     else if (r2 > 0.15) overnightLogs.push({ id: 'demo-o-' + n, shift_id: night.id, participant_id: c.id, bed_time: '21:00', wake_time: null, wakes: null, asleep_hours: null, active_hours: null, created_at: evAddDays(d, 1) + 'T09:30:00Z' });
@@ -5491,8 +5473,7 @@ function sumOverview(doc, ds, c){
   doc.appendChild(anSec('Transfers and personal care', 'Assisted transfers per ' + ds.series.mode + ' from the personal care log (structured count), and the care measures that have data. Days without a log are not zero.', cr.logs || cr.transfers.fromObservations ? [
     el('div', { 'class': 'an-grid2' }, [
       el('div', null, [ el('div', { 'class': 'an-sub' }, 'Assisted transfers'), anSeries(ds.series.buckets.map(function(k){ return { label: ds.series.mode === 'day' ? fmtDM(k.key) : 'wk ' + fmtDM(k.key), vals: [k.transfers], coverage: k.transferDays }; }), [{ label: 'Assisted transfers', color: RP_C.acc }], { height: 170, width: window.innerWidth < 640 ? 380 : 460, aria: 'Assisted transfers per ' + ds.series.mode }), anCaption((cr.transfers.logged == null ? 'No care log answered the transfers count' : cr.transfers.logged + ' transfers on ' + cr.transfers.loggedDays + ' logged day' + (cr.transfers.loggedDays === 1 ? '' : 's') + (cr.transfers.perDay != null ? ' · ' + hrsFmt(cr.transfers.perDay) + ' per logged day' : '')) + (cr.transfers.fromObservations ? ' · +' + cr.transfers.fromObservations + ' reviewed on unlogged days' : '')) ]),
-      el('div', null, [ el('div', { 'class': 'an-sub' }, 'Care measures (totals over the logs that answered)'), anHBars(meas.map(function(m){ return { label: m.label, n: m.total, note: 'in ' + m.recorded + ' of ' + m.of + ' logs' + (m.perDay != null ? ' · ' + hrsFmt(m.perDay) + '/day' : '') }; }), { empty: 'No care measure has an answer in this period.' }),
-        cr.showers.offered ? anCaption('Showers: ' + cr.showers.offered + ' offered · ' + cr.showers.done + ' done · ' + cr.showers.declined + ' declined · ' + cr.showers.outcomeNotRecorded + ' outcome not recorded') : null ])
+      el('div', null, [ el('div', { 'class': 'an-sub' }, 'Care measures (totals over the logs that answered)'), anHBars(meas.map(function(m){ return { label: m.label, n: m.total, note: 'in ' + m.recorded + ' of ' + m.of + ' logs' + (m.perDay != null ? ' · ' + hrsFmt(m.perDay) + '/day' : '') }; }), { empty: 'No care measure has an answer in this period.' }) ])
     ]),
     anTableToggle('Show days as a table', rpTable([ 'Day', { t: 'Care logs', n: true }, { t: 'Transfers', n: true }, '' ], cr.dailyTransfers.map(function(d){ var sh = ds.recordIds && (sumState().data.shifts || []).filter(function(s){ return s.date === d.date && (sumState().data.careLogs || []).some(function(l){ return l.shift_id === s.id; }); }); return [ fmtDate(d.date), { t: String(d.logs), n: true }, { t: d.transfers == null ? 'not answered' : String(d.transfers), n: true, m: d.transfers == null }, sh && sh.length ? el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ anInspect('Care logs on ' + fmtDateFull(d.date), '', sh.map(function(s){ return { label: (s.type === 'sleepover' ? 'Sleepover ' : 'Day shift ') + fmtRange(s.start_t, s.end_t), open: { kind: 'care', id: s.id } }; })); } }, 'Records') : '' ]; })))
   ] : [ anEmpty('No personal care logs in this period.') ]));
@@ -6104,8 +6085,6 @@ function exportCareLog(l){
   var box = el('div', { 'class': 'xp-rec xp-care' }, [ el('div', { 'class': 'xp-rec-h' }, 'Personal care log') ]);
   var t = el('table', { 'class': 'xp-tbl xp-tbl-sm' });
   [['Pad changes (wet)', l.pad_wet], ['Pad changes (bowel movement)', l.pad_bowel], ['Times found wet in bed', l.bed_wet], ['Bedding changes', l.bedding_changes],
-   ['Shower', l.shower_offered ? (l.shower_done === true ? 'Offered and done' : (l.shower_done === false ? 'Offered and declined' : 'Offered; outcome not recorded')) : 'Not offered this shift'],
-   ['Prompts before the shower was accepted', l.shower_offered ? l.shower_prompts : 'n/a'],
    ['Other care refusals needing prompting', l.care_refusals], ['Assisted transfers', l.transfers], ['Transfers one worker could not do safely alone', l.transfer_unsafe_alone]
   ].forEach(function(r){ t.appendChild(el('tr', null, [ el('td', null, r[0]), el('td', { 'class': 'n' }, String(r[1])) ])); });
   box.appendChild(t);

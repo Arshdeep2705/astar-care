@@ -208,8 +208,6 @@ function exportCareLog(l){
   var box = el('div', { 'class': 'xp-rec xp-care' }, [ el('div', { 'class': 'xp-rec-h' }, 'Personal care log') ]);
   var t = el('table', { 'class': 'xp-tbl xp-tbl-sm' });
   [['Pad changes (wet)', l.pad_wet], ['Pad changes (bowel movement)', l.pad_bowel], ['Times found wet in bed', l.bed_wet], ['Bedding changes', l.bedding_changes],
-   ['Shower', l.shower_offered ? (l.shower_done === true ? 'Offered and done' : (l.shower_done === false ? 'Offered and declined' : 'Offered; outcome not recorded')) : 'Not offered this shift'],
-   ['Prompts before the shower was accepted', l.shower_offered ? l.shower_prompts : 'n/a'],
    ['Other care refusals needing prompting', l.care_refusals], ['Assisted transfers', l.transfers], ['Transfers one worker could not do safely alone', l.transfer_unsafe_alone]
   ].forEach(function(r){ t.appendChild(el('tr', null, [ el('td', null, r[0]), el('td', { 'class': 'n' }, String(r[1])) ])); });
   box.appendChild(t);

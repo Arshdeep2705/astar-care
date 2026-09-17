@@ -170,32 +170,22 @@ function openCareLogModal(opts){
   function keep(v){ return v == null ? '' : v; }
   var f = {
     pad_wet: ex ? keep(ex.pad_wet) : '', pad_bowel: ex ? keep(ex.pad_bowel) : '', bed_wet: ex ? keep(ex.bed_wet) : '', bedding_changes: ex ? keep(ex.bedding_changes) : '',
-    shower_offered: ex ? (ex.shower_offered ? 'Yes' : 'No') : '',
-    shower_done: ex ? (ex.shower_done ? 'Yes' : 'No') : '',
-    shower_prompts: ex ? keep(ex.shower_prompts) : '',
     care_refusals: ex ? keep(ex.care_refusals) : '', transfers: ex ? keep(ex.transfers) : '', transfer_unsafe_alone: ex ? keep(ex.transfer_unsafe_alone) : ''
   };
-  var showerDet = el('div', { style: f.shower_offered === 'No' ? 'display:none' : '' }, [
-    evYesNo(f, 'shower_done', 'Was the shower done?'),
-    evNum(f, 'shower_prompts', 'How many prompts before ' + who + ' agreed to the shower', 'Count each time it was offered or ' + who + ' was encouraged before accepting. If the shower was declined altogether, enter the number of prompts made.')
-  ]);
+  /* shower questions retired 17 Sep 2026 (owner): showers are described in the note, not counted here */
   var errBox = el('div', { 'class': 'err-line', style: 'display:none;margin-bottom:8px' });
   var saveBtn = el('button', { 'class': 'btn btn-pri', onclick: save }, ex ? 'Save changes' : 'Save care log');
   function fail(msg){ errBox.style.display = 'block'; errBox.textContent = msg; busyBtn(saveBtn, false); }
   function save(){
     if (f.pad_wet === '' && f.pad_bowel === '' && f.transfers === '') return fail('Enter at least the pad changes and transfers for this shift. Type 0 if there were none; leave a box empty only if you did not observe it.');
-    if (f.shower_offered === '') return fail('Say whether a shower was offered this shift.');
-    if (f.shower_offered === 'Yes' && f.shower_done === '') return fail('Say whether the shower was done.');
     errBox.style.display = 'none';
     busyBtn(saveBtn, true);
     var rec = {
       pad_wet: evIntOrNull(f.pad_wet), pad_bowel: evIntOrNull(f.pad_bowel), bed_wet: evIntOrNull(f.bed_wet), bedding_changes: evIntOrNull(f.bedding_changes),
-      shower_offered: f.shower_offered === 'Yes', shower_done: f.shower_offered === 'Yes' && f.shower_done === 'Yes',
-      shower_prompts: f.shower_offered === 'Yes' ? evIntOrNull(f.shower_prompts) : null,
       care_refusals: evIntOrNull(f.care_refusals), transfers: evIntOrNull(f.transfers), transfer_unsafe_alone: evIntOrNull(f.transfer_unsafe_alone),
       updated_at: new Date().toISOString()
     };
-    var zeroKeys = ['pad_wet','pad_bowel','bed_wet','bedding_changes','shower_prompts','care_refusals','transfers','transfer_unsafe_alone'];
+    var zeroKeys = ['pad_wet','pad_bowel','bed_wet','bedding_changes','care_refusals','transfers','transfer_unsafe_alone'];
     var p;
     if (ex) p = evSaveWithNullFallback(function(r){ return sbUpd('ac_care_logs', 'id=eq.' + ex.id, r); }, rec, zeroKeys);
     else { rec.shift_id = shift.id; rec.participant_id = shift.client_id; rec.worker_id = worker ? worker.id : null; delete rec.updated_at; p = evSaveWithNullFallback(function(r){ return sbIns('ac_care_logs', [r]); }, rec, zeroKeys); }
@@ -212,9 +202,6 @@ function openCareLogModal(opts){
       evNum(f, 'bed_wet', 'Times found wet in bed'),
       evNum(f, 'bedding_changes', 'Bedding changes')
     ]),
-    el('div', { 'class': 't-label', style: 'margin:6px 0 8px' }, 'Shower'),
-    evYesNo(f, 'shower_offered', 'Was a shower offered this shift?', function(){ showerDet.style.display = f.shower_offered === 'No' ? 'none' : ''; }),
-    showerDet,
     el('div', { 'class': 't-label', style: 'margin:6px 0 8px' }, 'Refusals and manual handling'),
     evNum(f, 'care_refusals', 'Other care refusals needing prompting', 'Times ' + who + ' declined personal care (pad change, clothing change, toileting) and had to be prompted before accepting.'),
     el('div', { 'class': 'grid2' }, [
