@@ -36,7 +36,7 @@ var EV_DEFINITIONS = [
 function evAddDays(d, n){ var p = d.split('-'); var dt = new Date(+p[0], +p[1] - 1, +p[2] + n); return dt.getFullYear() + '-' + (dt.getMonth() < 9 ? '0' : '') + (dt.getMonth() + 1) + '-' + (dt.getDate() < 10 ? '0' : '') + dt.getDate(); }
 function evMondayOf(d){ var p = d.split('-'); var dt = new Date(+p[0], +p[1] - 1, +p[2]); var off = (dt.getDay() + 6) % 7; return evAddDays(d, -off); }
 function evTMin(t){ if (!t) return null; var p = String(t).split(':'); return (+p[0]) * 60 + (+p[1]); }
-function evNum(v){ if (v === null || v === undefined || v === '') return null; var n = parseFloat(v); return isNaN(n) ? null : n; }
+function evNumber(v){ if (v === null || v === undefined || v === '') return null; var n = parseFloat(v); return isNaN(n) ? null : n; }
 function evSum(a){ return a.reduce(function(x, y){ return x + y; }, 0); }
 function evAvg(a){ return a.length ? evSum(a) / a.length : null; }
 function evRound(n, d){ if (n == null) return null; var f = Math.pow(10, d == null ? 2 : d); return Math.round(n * f) / f; }
@@ -172,7 +172,7 @@ function evBuildDataset(inp){
   var onObs = obs.filter(function(o){ return /^overnight_/.test(o.category); });
   var nightRows = nightsAll.map(function(s){
     var l = onByShift[s.id];
-    var asleep = l ? evNum(l.asleep_hours) : null, active = l ? evNum(l.active_hours) : null;
+    var asleep = l ? evNumber(l.asleep_hours) : null, active = l ? evNumber(l.active_hours) : null;
     var mine = onObs.filter(function(o){ return evNightOf(o) === s.date; });
     var assist = mine.filter(function(o){ return o.category === 'overnight_assist'; });
     var withDur = assist.filter(function(o){ return o.start_time && o.end_time; });
@@ -189,7 +189,7 @@ function evBuildDataset(inp){
          with him and supporting him, so awake time IS support time. Anything left over is not a care
          category, it is an unaccounted gap in the two figures and should be zero. */
       awakeNoAssist: (asleep != null && active != null) ? evRound(Math.max(0, block - asleep - active)) : null,
-      wakes: l ? evNum(l.wakes) : null, bed: l ? (l.bed_time || null) : null, up: l ? (l.wake_time || null) : null,
+      wakes: l ? evNumber(l.wakes) : null, bed: l ? (l.bed_time || null) : null, up: l ? (l.wake_time || null) : null,
       preNullZero: !!(l && evIsPreNullRow(l) && l.wakes === 0), worker_id: s.worker_id, summaryId: l ? l.id : null, obsIds: mine.map(function(o){ return o.id; }) };
   });
   var inScopeRows = nightRows.filter(function(r){ return r.status === 'complete' || r.status === 'partial' || r.status === 'missing'; });
