@@ -602,9 +602,13 @@ function unlockBody(){
   window.scrollTo(0, rt.lockY || 0);
 }
 var modalReturnFocus = null;
-function closeModal(){
+function closeModal(swapping){
   var m = document.getElementById('ac-modal');
   if (m) m.remove();
+  /* openModal() closes the current dialog only to replace it: no focus return, no deferred
+     live refresh and — above all — no deferred build reload, which used to fire here and
+     reload the page instead of opening the new dialog (e.g. Summary → night → Open) */
+  if (swapping) return;
   if (!document.getElementById('ac-modal') && !document.getElementById('ac-confirm')) unlockBody();
   /* give keyboard focus back to the control that opened the dialog */
   if (modalReturnFocus && document.body.contains(modalReturnFocus)) { try { modalReturnFocus.focus(); } catch (e) {} }
@@ -624,9 +628,10 @@ function trapFocus(container){
   });
 }
 function openModal(node, opts){
-  closeModal();
+  var swapped = !!document.getElementById('ac-modal');
+  closeModal(true);
   opts = opts || {};
-  modalReturnFocus = document.activeElement;
+  if (!swapped) modalReturnFocus = document.activeElement;
   node.setAttribute('role', 'dialog'); node.setAttribute('aria-modal', 'true'); node.setAttribute('tabindex', '-1');
   var title = node.querySelector('.modal-head .t-title');
   if (title) { if (!title.id) title.id = 'dlg-' + Math.random().toString(36).slice(2, 8); node.setAttribute('aria-labelledby', title.id); }
