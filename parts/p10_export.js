@@ -186,34 +186,32 @@ function xpIncidentModel(ir){
   var yn = function(v){ return v ? 'Yes' : 'No'; };
   var rows = [
     ['1. Name of the staff member filling in this form', ir.staff_name],
-    ["3. Ticket Name (the Participant's name)", ir.ticket_name],
-    ['4. Ticket Description', ir.ticket_desc],
-    ['5. Date this incident happened', ir.incident_date ? fmtDateFull(ir.incident_date) : ''],
-    ['6. Time that this incident started', ir.incident_time ? fmtTime(ir.incident_time) : ''],
-    ['7. What type of incident is this', (ir.incident_types || []).join(', ')],
+    ["2. Ticket Name (the Participant's name)", ir.ticket_name],
+    ['3. Ticket Description', ir.ticket_desc],
+    ['4. Date this incident happened', ir.incident_date ? fmtDateFull(ir.incident_date) : ''],
+    ['5. Time that this incident started', ir.incident_time ? fmtTime(ir.incident_time) : ''],
+    ['6. What type of incident is this', (ir.incident_types || []).join(', ')],
     ['Fall details: did this incident involve a fall?', yn(ir.is_fall)]
   ];
-  if (ir.other_staff) rows.splice(1, 0, ['Recorded on this report (question retired 17 Sep 2026)', 'Other staff member on shift: ' + ir.other_staff]);
   if (ir.is_fall) rows.push(
     ['Where did the fall happen', ir.fall_location === 'Other' && ir.fall_location_other ? 'Other — ' + ir.fall_location_other : ir.fall_location],
     ['Happened during a transfer', ir.during_transfer == null ? 'Not recorded' : yn(ir.during_transfer)],
     ['Was equipment involved?', yn(ir.equipment_involved) + (ir.equipment_involved && ir.equipment_desc ? '. ' + ir.equipment_desc : '')]
   );
   if (ir.is_fall && ir.minutes_on_floor != null) rows.push(['Minutes on the floor before being helped up', ir.minutes_on_floor]);
-  if (ir.is_fall && ir.second_person_needed) rows.push(['Recorded on this report (question retired 9 Sep 2026)', 'Another person helped the participant up']);
   rows.push(
-    ['8. Was there any unauthorised use of restricted practice', ir.restrictive === 'No' ? 'No' : 'Yes'],
-    ['9. Type of unauthorised restrictive practice', ir.restrictive === 'No' ? 'Not applicable' : (ir.restrictive_types || []).join(', ')],
-    ['10. List any triggers that may have led to this incident', ir.triggers],
-    ['11. What response did you provide to the incident (what did you do)', ir.response],
-    ['12. What was the outcome', ir.outcome],
-    ['13. In this incident, was there any property damage?', ir.property_damage === 'No' ? 'No' : 'Yes'],
-    ['14. Property damage information', ir.property_damage === 'No' ? 'Not applicable' : ir.property_info],
-    ['15. Photos of property damage', ir.property_damage === 'No' ? 'Not applicable' : ((ir.property_photos || []).length ? (ir.property_photos.length + ' photo(s) on file') : 'None attached')],
-    ['16. Were emergency services called at all during this incident?', (ir.emergency || []).length ? ir.emergency.join(', ') : 'No'],
-    ['17. Were there any injuries?', ir.injuries == null || ir.injuries === '' ? 'Not answered' : (ir.injuries === 'No' ? 'No' : 'Yes')],
-    ['18. Who was injured and how did this injury happen?', ir.injuries === 'No' ? 'Not applicable' : ir.injury_who],
-    ['19. What kind of injury', ir.injuries === 'No' ? 'Not applicable' : ir.injury_kind]
+    ['7. Was there any unauthorised use of restricted practice', ir.restrictive === 'No' ? 'No' : 'Yes'],
+    ['8. Type of unauthorised restrictive practice', ir.restrictive === 'No' ? 'Not applicable' : (ir.restrictive_types || []).join(', ')],
+    ['9. List any triggers that may have led to this incident', ir.triggers],
+    ['10. What response did you provide to the incident (what did you do)', ir.response],
+    ['11. What was the outcome', ir.outcome],
+    ['12. In this incident, was there any property damage?', ir.property_damage === 'No' ? 'No' : 'Yes'],
+    ['13. Property damage information', ir.property_damage === 'No' ? 'Not applicable' : ir.property_info],
+    ['14. Photos of property damage', ir.property_damage === 'No' ? 'Not applicable' : ((ir.property_photos || []).length ? (ir.property_photos.length + ' photo(s) on file') : 'None attached')],
+    ['15. Were emergency services called at all during this incident?', (ir.emergency || []).length ? ir.emergency.join(', ') : 'No'],
+    ['16. Were there any injuries?', ir.injuries == null || ir.injuries === '' ? 'Not answered' : (ir.injuries === 'No' ? 'No' : 'Yes')],
+    ['17. Who was injured and how did this injury happen?', ir.injuries === 'No' ? 'Not applicable' : ir.injury_who],
+    ['18. What kind of injury', ir.injuries === 'No' ? 'Not applicable' : ir.injury_kind]
   );
   return { kind: 'rows', cls: 'xp-ir', head: 'Incident report · ' + ((ir.incident_types || []).join(', ') || 'Incident') + (ir.incident_time ? ' · ' + fmtTime(ir.incident_time) : ''), rows: rows };
 }
