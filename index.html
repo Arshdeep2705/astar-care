@@ -552,7 +552,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20260911132847';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20260917124653';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -4849,7 +4849,7 @@ var EV_DEFINITIONS = [
   ['Assisted transfers', 'From the personal care log’s structured count. On a day with no care log, individually reviewed transfer observations are counted instead; the same day is never counted from both. Mentions of a wheelchair in prose are not transfers.'],
   ['Care measures', 'Total and per-day are computed only over the logs that answered that measure; per-day divides by the number of days with that measure recorded. Logs saved before 7 September 2026 stored blank answers as 0 and are listed under checks.'],
   ['Showers', '“Offered” is what the worker recorded. “Done” and “declined” are recorded answers; a shower recorded as offered with no completion answer is shown as “outcome not recorded”, not as declined.'],
-  ['Incidents', 'Falls are incidents the worker recorded as a fall. “Involving an emergency call” counts incidents where any emergency service was recorded as called; the form does not record how many calls or whether the service attended. Injuries: the worker’s answer; no answer = unknown. Minutes on the floor are only summed where recorded and are the time before being helped up, not a waiting time.'],
+  ['Incidents', 'Falls are incidents the worker recorded as a fall. “Involving an emergency call” counts incidents where any emergency service was recorded as called; the form does not record how many calls or whether the service attended. Injuries: the worker’s answer; no answer = unknown.'],
   ['Locations and activities', 'Location is where the record says it happened. Whether a transfer was in progress is the worker’s answer to that question; for records made before the question existed (before 9 September 2026) a transfer is inferred only when the recorded location itself names a transfer, and those rows are marked as inferred.'],
   ['Excluded material', 'Sources marked excluded (training samples, generated examples) and observations that are proposed or rejected never enter any figure. Demonstration mode uses an entirely synthetic participant.']
 ];
@@ -5530,8 +5530,7 @@ function sumIncidents(doc, ds, c){
     anMetric('Incident reports', I.n, 'reports', I.list.filter(function(e){ return e.kind === 'observation'; }).length ? I.list.filter(function(e){ return e.kind === 'observation'; }).length + ' from reviewed documents' : null),
     anMetric('Falls', I.falls, 'of ' + I.n, I.transfers.yes ? I.transfers.yes + ' during a transfer (recorded)' + (I.transfers.inferred ? ', ' + I.transfers.inferred + ' inferred from location' : '') : null),
     anMetric('Involving emergency services', I.emergencyInvolved, 'of ' + I.n, 'a call was recorded; attendance is not on the form'),
-    anMetric('Injuries recorded', I.injuriesYes, 'of ' + I.n, I.injuriesUnknown ? I.injuriesUnknown + ' not answered (unknown)' : null),
-    anMetric('Time on the floor', I.floor.n ? I.floor.minutes : null, 'min', I.floor.n ? 'recorded on ' + I.floor.n + ' of ' + I.floor.ofFalls + ' falls · time before being helped up' : (I.falls ? 'not recorded on any fall' : 'no falls'), { insufficient: !I.falls })
+    anMetric('Injuries recorded', I.injuriesYes, 'of ' + I.n, I.injuriesUnknown ? I.injuriesUnknown + ' not answered (unknown)' : null)
   ]));
   doc.appendChild(anSec('Incidents and falls over time', 'Recorded per ' + ds.series.mode + '. Zero bars mean no recorded event, not complete observation where records are missing.', [
     sumSeriesChart(ds, ['incidents', 'falls'], [{ label: 'Incidents', color: RP_C.acc }, { label: 'Falls', color: RP_C.bad }]), anLegend([{ c: RP_C.acc, l: 'All incidents' }, { c: RP_C.bad, l: 'Falls' }]),
@@ -6067,9 +6066,9 @@ function exportIncident(ir){
   if (ir.is_fall) rows.push(
     ['Where did the fall happen', ir.fall_location === 'Other' && ir.fall_location_other ? 'Other — ' + ir.fall_location_other : ir.fall_location],
     ['Happened during a transfer', ir.during_transfer == null ? 'Not recorded' : yn(ir.during_transfer)],
-    ['Minutes on the floor before being helped up', ir.minutes_on_floor != null ? ir.minutes_on_floor : 'Not recorded'],
     ['Was equipment involved?', yn(ir.equipment_involved) + (ir.equipment_involved && ir.equipment_desc ? '. ' + ir.equipment_desc : '')]
   );
+  if (ir.is_fall && ir.minutes_on_floor != null) rows.push(['Minutes on the floor before being helped up', ir.minutes_on_floor]);
   if (ir.is_fall && ir.second_person_needed) rows.push(['Recorded on this report (question retired 9 Sep 2026)', 'Another person helped the participant up']);
   rows.push(
     ['8. Was there any unauthorised use of restricted practice', ir.restrictive === 'No' ? 'No' : 'Yes'],

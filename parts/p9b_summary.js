@@ -324,8 +324,7 @@ function sumIncidents(doc, ds, c){
     anMetric('Incident reports', I.n, 'reports', I.list.filter(function(e){ return e.kind === 'observation'; }).length ? I.list.filter(function(e){ return e.kind === 'observation'; }).length + ' from reviewed documents' : null),
     anMetric('Falls', I.falls, 'of ' + I.n, I.transfers.yes ? I.transfers.yes + ' during a transfer (recorded)' + (I.transfers.inferred ? ', ' + I.transfers.inferred + ' inferred from location' : '') : null),
     anMetric('Involving emergency services', I.emergencyInvolved, 'of ' + I.n, 'a call was recorded; attendance is not on the form'),
-    anMetric('Injuries recorded', I.injuriesYes, 'of ' + I.n, I.injuriesUnknown ? I.injuriesUnknown + ' not answered (unknown)' : null),
-    anMetric('Time on the floor', I.floor.n ? I.floor.minutes : null, 'min', I.floor.n ? 'recorded on ' + I.floor.n + ' of ' + I.floor.ofFalls + ' falls · time before being helped up' : (I.falls ? 'not recorded on any fall' : 'no falls'), { insufficient: !I.falls })
+    anMetric('Injuries recorded', I.injuriesYes, 'of ' + I.n, I.injuriesUnknown ? I.injuriesUnknown + ' not answered (unknown)' : null)
   ]));
   doc.appendChild(anSec('Incidents and falls over time', 'Recorded per ' + ds.series.mode + '. Zero bars mean no recorded event, not complete observation where records are missing.', [
     sumSeriesChart(ds, ['incidents', 'falls'], [{ label: 'Incidents', color: RP_C.acc }, { label: 'Falls', color: RP_C.bad }]), anLegend([{ c: RP_C.acc, l: 'All incidents' }, { c: RP_C.bad, l: 'Falls' }]),

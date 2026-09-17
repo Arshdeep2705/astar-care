@@ -170,9 +170,9 @@ function exportIncident(ir){
   if (ir.is_fall) rows.push(
     ['Where did the fall happen', ir.fall_location === 'Other' && ir.fall_location_other ? 'Other — ' + ir.fall_location_other : ir.fall_location],
     ['Happened during a transfer', ir.during_transfer == null ? 'Not recorded' : yn(ir.during_transfer)],
-    ['Minutes on the floor before being helped up', ir.minutes_on_floor != null ? ir.minutes_on_floor : 'Not recorded'],
     ['Was equipment involved?', yn(ir.equipment_involved) + (ir.equipment_involved && ir.equipment_desc ? '. ' + ir.equipment_desc : '')]
   );
+  if (ir.is_fall && ir.minutes_on_floor != null) rows.push(['Minutes on the floor before being helped up', ir.minutes_on_floor]);
   if (ir.is_fall && ir.second_person_needed) rows.push(['Recorded on this report (question retired 9 Sep 2026)', 'Another person helped the participant up']);
   rows.push(
     ['8. Was there any unauthorised use of restricted practice', ir.restrictive === 'No' ? 'No' : 'Yes'],
