@@ -245,7 +245,7 @@ function renderWorker(app){
 function bottomNav(items, current, go){
   return el('nav', { 'class': 'bnav', 'aria-label': 'Main' }, el('div', { 'class': 'bnav-in' }, items.map(function(it){
     return el('button', { 'class': 'bnav-btn' + (current === it.id ? ' on' : ''), 'aria-current': current === it.id ? 'page' : null, onclick: function(){ go(it.id); } }, [
-      svgIcon(it.ic), it.label
+      svgIcon(it.ic), it.short || it.label
     ]);
   })));
 }
@@ -253,6 +253,7 @@ function bottomNav(items, current, go){
 function adminNavItems(){
   return [
     { id: 'roster', label: 'Roster', ic: IC.grid },
+    { id: 'roc', label: 'Roster of care', short: 'Care', ic: IC.cal },
     { id: 'inbox', label: 'Inbox', ic: IC.inbox },
     { id: 'avail', label: 'Availability', ic: IC.clock },
     { id: 'pay', label: 'Pay', ic: IC.pay },
@@ -276,6 +277,7 @@ function renderAdmin(app){
   app.appendChild(hdr);
   var main = el('main', { 'class': 'wrap main' });
   if (state.adminTab === 'roster') viewRoster(main);
+  else if (state.adminTab === 'roc') viewRosterOfCare(main);
   else if (state.adminTab === 'inbox') viewInbox(main);
   else if (state.adminTab === 'avail') viewAdminAvail(main);
   else if (state.adminTab === 'pay') viewPay(main);

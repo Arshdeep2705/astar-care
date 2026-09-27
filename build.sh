@@ -4,7 +4,7 @@
 # Screen" on /admin opens the ADMIN portal, not start_url "/").
 cd "$(dirname "$0")"
 cat parts/p1_head.html parts/p2_core.js parts/p3_shell.js parts/p4_worker.js \
-    parts/p5_note_incident.js parts/p6_calendar.js parts/p7_roster.js \
+    parts/p5_note_incident.js parts/p6_calendar.js parts/p7_roster.js parts/p7b_care_roster.js \
     parts/p8_admin_rest.js parts/p9_evidence.js parts/p9a_metrics.js parts/p9b_summary.js parts/p10_export.js > index.html
 printf '</script>\n</body>\n</html>\n' >> index.html
 mkdir -p admin
