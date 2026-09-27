@@ -9,9 +9,19 @@ function missingNoteShifts(w){
   }).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
 }
 /* the shift the worker is on right now, else the next one */
+/* Clocked in but not out yet. The worker finishes when they finish (owner 2026-09-27):
+   the shift stays 'on shift now' with its Clock out button past the rostered end,
+   up to 12 h after it (older forgotten clock-outs are fixed by the office). */
+function stillClockedIn(s){
+  var clocks = clocksForShift(s.id);
+  if (!clocks.some(function(x){ return x.kind === 'in'; }) || clocks.some(function(x){ return x.kind === 'out'; })) return false;
+  return Date.now() - shiftEndDate(s).getTime() < 12 * 3600000;
+}
 function currentOrNextShift(w){
   var now = new Date();
   var mine = myShifts(w);
+  var open = mine.filter(stillClockedIn).sort(function(a, b){ return shiftStartDate(a) - shiftStartDate(b); })[0];
+  if (open) return { s: open, kind: 'now' };
   var cur = mine.filter(function(s){ return shiftStartDate(s) <= now && shiftEndDate(s) >= now; })
     .sort(function(a, b){ return shiftStartDate(a) - shiftStartDate(b); })[0];
   if (cur) return { s: cur, kind: 'now' };
@@ -50,11 +60,11 @@ function nowCard(s, w, kind){
   var cin = clocks.filter(function(x){ return x.kind === 'in'; }).slice(-1)[0];
   var cout = clocks.filter(function(x){ return x.kind === 'out'; }).slice(-1)[0];
   var card = el('section', { 'class': 'nowcard', style: '--c:' + (c ? c.colour : 'var(--acc)'), 'aria-label': kind === 'now' ? 'Current shift' : 'Next shift' });
-  card.appendChild(el('div', { 'class': 'nc-k' }, kind === 'now' ? 'On shift now' : 'Your next shift'));
+  card.appendChild(el('div', { 'class': 'nc-k' }, kind === 'now' ? (shiftEnded(s) ? 'Still on shift · clock out when you finish' : 'On shift now') : 'Your next shift'));
   card.appendChild(el('div', { 'class': 'nc-t' }, shiftSpanLabel(s)));
   card.appendChild(el('div', { 'class': 'nc-who' }, (c ? c.name : 'Participant not set') + ' · ' + (s.type === 'sleepover' ? 'Sleepover' : 'Day shift')));
   if (c && c.address) card.appendChild(el('div', { 'class': 'nc-meta' }, [ svgIcon(IC.pin), c.address ]));
-  if (shiftIsToday(s) || kind === 'now') {
+  if (shiftIsToday(s) || kind === 'now' || stillClockedIn(s)) {
     var clockRow = el('div', { 'class': 'nc-meta', style: 'margin-top:8px' });
     if (cin) clockRow.appendChild(el('span', { 'class': 'status done' }, 'Clocked in ' + fmtTime(pad2(new Date(cin.at).getHours()) + ':' + pad2(new Date(cin.at).getMinutes()))));
     if (cout) clockRow.appendChild(el('span', { 'class': 'status na' }, 'Clocked out ' + fmtTime(pad2(new Date(cout.at).getHours()) + ':' + pad2(new Date(cout.at).getMinutes()))));
@@ -265,7 +275,7 @@ function shiftCard(s, w, opts){
   ]));
 
   /* clock area — only for today's shifts */
-  if (opts.clock && shiftIsToday(s)) {
+  if (opts.clock && (shiftIsToday(s) || stillClockedIn(s))) {
     var clockRow = el('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' });
     if (cin) clockRow.appendChild(el('span', { 'class': 'tag tag-ok' }, ['In ', fmtTime(pad2(new Date(cin.at).getHours()) + ':' + pad2(new Date(cin.at).getMinutes()))]));
     if (cout) clockRow.appendChild(el('span', { 'class': 'tag tag-mut' }, ['Out ', fmtTime(pad2(new Date(cout.at).getHours()) + ':' + pad2(new Date(cout.at).getMinutes()))]));
