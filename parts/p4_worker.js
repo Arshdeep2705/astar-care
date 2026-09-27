@@ -335,13 +335,37 @@ function notePreview(body){
   return 'Open to read';
 }
 
+function distFmt(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km'; }
+function mapsUrl(lat, lng){ return 'https://www.google.com/maps?q=' + lat + ',' + lng; }
+
+/* Clock in: must be at the client's address (geofence).
+   Clock out (owner 2026-09-27): only once the shift note is saved, and allowed from
+   anywhere — outside the geofence the worker types where they are / why, and the pin,
+   distance and reason are recorded for the office (pattern from the King Kitchen app). */
 function clockBtn(s, w, kind){
   var c = clientById(s.client_id);
-  var btn = el('button', { 'class': 'btn btn-sm ' + (kind === 'in' ? 'btn-dark' : 'btn-sec'), onclick: doClock }, [
-    svgIcon(IC.clock), kind === 'in' ? 'Clock in' : 'Clock out'
-  ]);
+  var label = kind === 'in' ? 'Clock in' : 'Clock out';
+  var btn = el('button', { 'class': 'btn btn-sm ' + (kind === 'in' ? 'btn-dark' : 'btn-sec'), onclick: doClock }, [ svgIcon(IC.clock), label ]);
+  function reset(){ btn.disabled = false; btn.innerHTML = ''; appendKids(btn, [svgIcon(IC.clock), label]); }
+  function save(pos, d, reason){
+    var rec = { shift_id: s.id, worker_id: w.id, kind: kind, at: new Date().toISOString(),
+      lat: pos.coords.latitude, lng: pos.coords.longitude, distance_m: d == null ? null : Math.round(d) };
+    if (reason) { rec.offsite = true; rec.offsite_reason = reason; }
+    return sbIns('ac_clock', [rec]).then(function(){
+      var nw = new Date();
+      notifyAdmins(w.name + ' clocked ' + kind + (reason ? ' OFF-SITE' : '') + ' — ' + (c ? c.name : ''),
+        fmtTime(pad2(nw.getHours()) + ':' + pad2(nw.getMinutes())) + (d == null ? '' : ' · ' + distFmt(d) + ' from ' + (reason ? 'the address' : 'site')) + (reason ? ' · "' + reason + '"' : ''));
+      closeModal(); refresh();
+      toast('Clocked ' + kind + (reason ? ' · your location was recorded for the office' : (d == null ? '' : ' · ' + Math.round(d) + ' m from site')));
+    });
+  }
   function doClock(){
     if (!c) { toast('This shift has no client attached — ask the office to fix it.', true); return; }
+    if (kind === 'out' && shiftNotesForShift(s.id).length === 0) {
+      toast('Write your shift note first — then you can clock out.');
+      openNoteModal({ shift: s, worker: w });
+      return;
+    }
     if (!navigator.geolocation) { toast('Location is not available on this device.', true); return; }
     btn.disabled = true; btn.textContent = 'Locating…';
     navigator.geolocation.getCurrentPosition(function(pos){
@@ -349,36 +373,52 @@ function clockBtn(s, w, kind){
       var d = noSite ? null : haversine(pos.coords.latitude, pos.coords.longitude, c.lat, c.lng);
       var radius = c.radius_m || 200;
       if (d != null && d > radius) {
-        btn.disabled = false; btn.innerHTML = ''; appendKids(btn, [svgIcon(IC.clock), kind === 'in' ? 'Clock in' : 'Clock out']);
-        toast("You're " + Math.round(d) + " m from " + c.name + "'s address — get within " + radius + " m to clock " + kind + ".", true);
+        reset();
+        if (kind === 'in') {
+          toast("You're " + distFmt(d) + " from " + c.name + "'s address — get within " + radius + " m to clock in.", true);
+          return;
+        }
+        openOffsiteReason(c, d, function(reason, done){ save(pos, d, reason)["catch"](function(e){ done(); toast(e.message, true); }); });
         return;
       }
-      sbIns('ac_clock', [{ shift_id: s.id, worker_id: w.id, kind: kind, at: new Date().toISOString(),
-        lat: pos.coords.latitude, lng: pos.coords.longitude, distance_m: d == null ? null : Math.round(d) }])
-        .then(function(){
-          var nw = new Date();
-          notifyAdmins(w.name + ' clocked ' + kind + ' — ' + (c ? c.name : ''),
-            fmtTime(pad2(nw.getHours()) + ':' + pad2(nw.getMinutes())) + (d == null ? '' : ' · ' + Math.round(d) + ' m from site'));
-          closeModal(); refresh();
-          if (kind === 'out' && shiftNotesForShift(s.id).length === 0) {
-            // the best moment to catch the note: right at clock-out
-            toast('Clocked out — write up the shift before you head off');
-            openNoteModal({ shift: s, worker: w });
-          } else {
-            toast('Clocked ' + kind + (d == null ? '' : ' · ' + Math.round(d) + ' m from site'));
-          }
-        })
-        ["catch"](function(e){
-          btn.disabled = false; btn.innerHTML = '';
-          appendKids(btn, [svgIcon(IC.clock), kind === 'in' ? 'Clock in' : 'Clock out']);
-          toast(e.message, true);
-        });
+      save(pos, d, null)["catch"](function(e){ reset(); toast(e.message, true); });
     }, function(err){
-      btn.disabled = false; btn.innerHTML = ''; appendKids(btn, [svgIcon(IC.clock), kind === 'in' ? 'Clock in' : 'Clock out']);
+      reset();
       toast(err.code === 1 ? 'Location permission was denied — allow it in your browser to clock ' + kind + '.' : 'Could not get your location. Try again.', true);
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
   }
   return btn;
+}
+
+/* "Where are you / why?" — required before an off-site clock-out */
+function openOffsiteReason(c, d, onConfirm){
+  var inp = el('input', { 'class': 'inp', type: 'text', maxlength: '200', placeholder: 'e.g. Finished at the shops, client going home by taxi', autocomplete: 'off' });
+  var ok = el('button', { 'class': 'btn btn-pri btn-block', onclick: go }, 'Confirm clock out');
+  inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') go(); });
+  function go(){
+    var r = inp.value.trim();
+    if (!r) { toast('Type where you are or why you are clocking out from here.', true); inp.focus(); return; }
+    busyBtn(ok, true);
+    onConfirm(r, function(){ busyBtn(ok, false); });
+  }
+  var m = el('div', { 'class': 'modal', style: 'max-width:420px' }, [
+    el('div', { 'class': 'sheet-grab' }),
+    el('div', { 'class': 'modal-head' }, [
+      el('div', { 'class': 't-title' }, 'Clocking out away from ' + c.name + '’s address'),
+      el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
+    ]),
+    el('div', { 'class': 'modal-body' }, [
+      el('div', { 'class': 'banner warn', style: 'margin-bottom:14px' }, [
+        el('div', { style: 'color:var(--warnc);display:flex' }, svgIcon(IC.pin)),
+        el('div', { style: 'flex:1' }, ['You are ', el('b', null, distFmt(d)), ' from ' + c.name + '’s address. Your exact location will be recorded and shown to the office.'])
+      ]),
+      el('div', { 'class': 'field' }, [ el('label', null, 'Where are you / why? (required)'), inp ]),
+      ok,
+      el('button', { 'class': 'btn btn-ghost btn-block', style: 'margin-top:8px', onclick: closeModal }, 'Cancel')
+    ])
+  ]);
+  openModal(m);
+  setTimeout(function(){ try { inp.focus(); } catch (e) {} }, 50);
 }
 
 /* shift sheet from calendar tap */

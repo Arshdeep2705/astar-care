@@ -349,6 +349,11 @@ function openAssign(s){
 }
 
 /* ---------- admin shift detail ---------- */
+/* small 'map' link to the exact pin a clock was recorded at (📍 off-site ones are highlighted) */
+function clockPinLink(rec){
+  if (!rec || rec.lat == null || rec.lng == null) return null;
+  return el('a', { 'class': 'tag ' + (rec.offsite ? 'tag-warn' : 'tag-mut'), href: mapsUrl(rec.lat, rec.lng), target: '_blank', rel: 'noopener', title: 'Open the exact location on Google Maps', style: 'text-decoration:none' }, rec.offsite ? '📍 off-site' : 'map');
+}
 function openAdminShift(s){
   var c = clientById(s.client_id);
   var w = s.worker_id ? workerById(s.worker_id) : null;
@@ -397,10 +402,15 @@ function openAdminShift(s){
     var kv = el('div', { 'class': 'card', style: 'padding:6px 16px;box-shadow:none;background:var(--paper);border:0' });
     kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Clock in'),
       el('span', { 'class': 'v', style: 'display:flex;align-items:center;gap:6px;justify-content:flex-end' }, [
-        cin ? fmtDT(cin.at) + (cin.distance_m != null ? ' · ' + Math.round(cin.distance_m) + ' m' : '') : '—', clockEditBtn(cin, 'in') ]) ]));
+        cin ? fmtDT(cin.at) + (cin.distance_m != null ? ' · ' + Math.round(cin.distance_m) + ' m' : '') : '—', clockPinLink(cin), clockEditBtn(cin, 'in') ]) ]));
     kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Clock out'),
       el('span', { 'class': 'v', style: 'display:flex;align-items:center;gap:6px;justify-content:flex-end' }, [
-        cout ? fmtDT(cout.at) + (cout.distance_m != null ? ' · ' + Math.round(cout.distance_m) + ' m' : '') : '—', clockEditBtn(cout, 'out') ]) ]));
+        cout ? fmtDT(cout.at) + (cout.distance_m != null ? ' · ' + distFmt(cout.distance_m) : '') : '—', clockPinLink(cout), clockEditBtn(cout, 'out') ]) ]));
+    if (cout && cout.offsite) kv.appendChild(el('div', { 'class': 'banner warn', style: 'margin:6px 0 8px;font-size:13.5px' }, [
+      el('div', { style: 'color:var(--warnc);display:flex' }, svgIcon(IC.pin)),
+      el('div', { style: 'flex:1' }, [ el('b', null, 'Off-site clock-out'), ' · ' + (cout.distance_m != null ? distFmt(cout.distance_m) + ' from the address' : 'distance unknown'),
+        cout.offsite_reason ? el('div', { style: 'margin-top:2px' }, '“' + cout.offsite_reason + '”') : null ])
+    ]));
     if (actual != null) {
       var varc = actual - rostered;
       kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Worked'), el('span', { 'class': 'v' }, hrsFmt(actual) + ' h') ]));
