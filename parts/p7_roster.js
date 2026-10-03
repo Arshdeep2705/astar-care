@@ -782,7 +782,7 @@ function openSendRoster(mode){
   workers.forEach(function(w){
     var lines = perWorker[w.id].sort(function(a,b){ return a.date === b.date ? tMin(a.start_t) - tMin(b.start_t) : (a.date < b.date ? -1 : 1); })
       .map(function(s){ var c = clientById(s.client_id); return fmtDate(s.date) + ': ' + (c ? c.name : '') + ' ' + fmtRange(s.start_t, s.end_t) + (s.type === 'sleepover' ? ' (sleepover)' : ''); });
-    var msg = 'Hi ' + firstName(w.name) + ', here is your roster for ' + fmtDate(from) + ' – ' + fmtDate(to) + ':\n\n' + lines.join('\n') + '\n\nThanks!';
+    var msg = '\uD83D\uDEA8 Hi ' + firstName(w.name) + ', here is your roster for ' + fmtDate(from) + ' – ' + fmtDate(to) + ':\n\n' + lines.join('\n') + '\n\nPls confirm';
     body.appendChild(el('div', { 'class': 'card card-pad', style: 'margin-bottom:10px;padding:14px 16px' }, [
       el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:8px' }, [
         el('span', { 'class': 'avatar', style: 'background:' + w.colour }, initials(w.name)),
@@ -799,6 +799,7 @@ function openSendRoster(mode){
             })
             ["catch"](function(err){ toast(err.message, true); });
         } }, 'Send in-app'),
+        el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(e){ copyText(msg, e.currentTarget); } }, 'Copy'),
         el('a', { 'class': 'btn btn-sm btn-sec', href: 'mailto:' + encodeURIComponent(w.email) + '?subject=' + encodeURIComponent('Your roster ' + fmtDM(from) + ' – ' + fmtDM(to)) + '&body=' + encodeURIComponent(msg), target: '_blank', style: 'text-decoration:none' }, 'Email')
       ])
     ]));
