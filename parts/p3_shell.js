@@ -1,5 +1,6 @@
 /* ================= render root ================= */
 function render(){
+  ensureUnlocked();
   var app = document.getElementById('app');
   app.innerHTML = '';
   if (state.pwChange) { renderSetPassword(app); return; }

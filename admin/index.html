@@ -552,7 +552,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20261003184246';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20261003185702';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -1175,6 +1175,15 @@ function unlockBody(){
   document.body.style.cssText = '';
   window.scrollTo(0, rt.lockY || 0);
 }
+/* Safety net (owner, 3 Oct 2026: "bottom bar works but the page won't scroll"): the page
+   behind a dialog is frozen with position:fixed; if any path ever closes a dialog without
+   unfreezing, the page stays stuck. Whenever no dialog is open, make sure it's unfrozen. */
+function ensureUnlocked(){
+  if (document.body.style.position === 'fixed' && !document.getElementById('ac-modal') && !document.getElementById('ac-confirm')) unlockBody();
+}
+['touchstart', 'wheel', 'keydown'].forEach(function(ev){
+  document.addEventListener(ev, ensureUnlocked, { passive: true, capture: true });
+});
 var modalReturnFocus = null;
 function closeModal(swapping){
   var m = document.getElementById('ac-modal');
@@ -1249,6 +1258,7 @@ function busyBtn(btn, on){
 }
 /* ================= render root ================= */
 function render(){
+  ensureUnlocked();
   var app = document.getElementById('app');
   app.innerHTML = '';
   if (state.pwChange) { renderSetPassword(app); return; }

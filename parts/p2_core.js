@@ -629,6 +629,15 @@ function unlockBody(){
   document.body.style.cssText = '';
   window.scrollTo(0, rt.lockY || 0);
 }
+/* Safety net (owner, 3 Oct 2026: "bottom bar works but the page won't scroll"): the page
+   behind a dialog is frozen with position:fixed; if any path ever closes a dialog without
+   unfreezing, the page stays stuck. Whenever no dialog is open, make sure it's unfrozen. */
+function ensureUnlocked(){
+  if (document.body.style.position === 'fixed' && !document.getElementById('ac-modal') && !document.getElementById('ac-confirm')) unlockBody();
+}
+['touchstart', 'wheel', 'keydown'].forEach(function(ev){
+  document.addEventListener(ev, ensureUnlocked, { passive: true, capture: true });
+});
 var modalReturnFocus = null;
 function closeModal(swapping){
   var m = document.getElementById('ac-modal');
