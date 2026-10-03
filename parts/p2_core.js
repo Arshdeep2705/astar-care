@@ -438,13 +438,37 @@ function liveGuarded(){
   return document.getElementById('ac-modal') || document.getElementById('ac-confirm') ||
     (ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT' || ae.tagName === 'SELECT'));
 }
+/* Background refreshes (60 s poll + every saved change anywhere) used to rebuild the whole
+   screen every time, even when nothing had changed. On phones that made scrolling jump and
+   stall (owner, 3 Oct 2026). Now: redraw only when the data actually changed, never while the
+   user is scrolling or touching the screen, and keep the scroll position. */
+var lastScrollAt = 0;
+['scroll', 'touchstart', 'touchmove', 'wheel'].forEach(function(ev){
+  window.addEventListener(ev, function(){ lastScrollAt = Date.now(); }, { passive: true });
+});
+function userScrolling(){ return Date.now() - lastScrollAt < 1500; }
+function dataSig(){
+  var str = JSON.stringify(state.data), h = 0;
+  for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return str.length + ':' + h;
+}
+function renderKeepScroll(){
+  var y = window.scrollY || 0;
+  render();
+  if (y) window.scrollTo(0, y);
+}
 function liveRefresh(){
   if (!state.auth || state.loading) return;
   if (liveGuarded()) { rt.pending = true; return; }
   rt.pending = false;
+  var before = dataSig();
   loadAll().then(function(){
-    if (liveGuarded()) { rt.pending = true; return; }
-    render();
+    if (dataSig() === before) return;              // nothing changed: leave the screen alone
+    (function paint(){
+      if (liveGuarded()) { rt.pending = true; return; }
+      if (userScrolling()) { setTimeout(paint, 800); return; }
+      renderKeepScroll();
+    })();
   });
 }
 function scheduleLive(){ clearTimeout(rt.timer); rt.timer = setTimeout(liveRefresh, 700); }
