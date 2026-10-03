@@ -28,6 +28,15 @@ function shiftsFor(reqId, date){
   return state.data.shifts.filter(function(s){ return s.req_id === reqId && s.date === date; })
     .sort(function(a, b){ return tMin(a.start_t) - tMin(b.start_t); });
 }
+/* one-off shifts the shift-type slots don't cover (a day outside the type's days, or no type) —
+   e.g. an extra Sunday for a Mon–Sat client. Shown as their own chips so nothing is hidden. */
+function extraShiftsFor(clientId, date){
+  return state.data.shifts.filter(function(s){
+    if (s.client_id !== clientId || s.date !== date) return false;
+    var rq = s.req_id ? state.data.reqs.find(function(r){ return r.id === s.req_id; }) : null;
+    return !rq || rq.days.indexOf(dow(date)) < 0;
+  }).sort(function(a, b){ return tMin(a.start_t) - tMin(b.start_t); });
+}
 /* one roster row per client — a client with several requirements (e.g. Tim's
    day shift + sleepover) gets its chips stacked in the same cell */
 function clientRowGroups(){
@@ -239,6 +248,7 @@ function rosterWeekGrid(wkDays, groups, t){
         if (!parts.length) cell.appendChild(rosterChip(null, { client: g.client, req: rq }, d));
         else parts.forEach(function(p){ cell.appendChild(rosterChip(p, { client: g.client, req: rq }, d)); });
       });
+      extraShiftsFor(g.client.id, d).forEach(function(p){ any = true; cell.appendChild(rosterChip(p, { client: g.client, req: { type: p.type, start_t: p.start_t, end_t: p.end_t } }, d)); });
       if (!any) cell.appendChild(el('div', { 'class': 'rw-chip off' }, ''));
       tr.appendChild(cell);
     });
@@ -256,6 +266,11 @@ function rosterMobileWeek(wkDays, rows, t){
       var parts = shiftsFor(row.req.id, d);
       if (!parts.length) items.push({ s: null, row: row });
       else parts.forEach(function(p){ items.push({ s: p, row: row }); });
+    });
+    var seenClient = {};
+    rows.forEach(function(row){
+      if (seenClient[row.client.id]) return; seenClient[row.client.id] = true;
+      extraShiftsFor(row.client.id, d).forEach(function(p){ items.push({ s: p, row: { client: row.client, req: { type: p.type, start_t: p.start_t, end_t: p.end_t } } }); });
     });
     if (!items.length) return;
     var day = el('div', { 'class': 'agenda-day' + (d === t ? ' today' : '') }, [
