@@ -368,7 +368,7 @@ function viewPay(main){
     ]));
   }
   main.appendChild(el('div', { 'class': 'hint', style: 'margin-bottom:4px' },
-    'Everyone is paid as rostered. Hourly shift types pay the worker’s weekday / Saturday / Sunday rate for the rostered hours. Flat shift types (set on the shift type under Team, e.g. Tim’s day $250 for 9am–6pm and sleepover $150 for 6pm–9am) pay each rostered hour at the rate of the period it falls in, so a standard shift earns its flat amount, a sleepover that runs into the morning earns those hours at the day rate, and a day shift that starts late loses them. Kilometres come from Mileage notes at ' + money(+(state.data.settings.km_rate || 0)) + '/km.'));
+    'Everyone is paid as rostered. Hourly shift types pay the worker’s weekday / Saturday / Sunday rate for the rostered hours. Flat shift types (set on the shift type under Team, e.g. Tim’s day $250 for 9am–6pm and sleepover $150 for 6pm–9am) pay each rostered hour at the rate of the period it falls in, so a standard shift earns its flat amount, a sleepover that runs into the morning earns those hours at the day rate, and a day shift that starts late loses them. Kilometres come from Mileage notes at ' + money(+(state.data.settings.km_rate || 0)) + '/km, unless a worker has their own km rate (Team → rates).'));
 
   if (onlyClient && !workers.length) main.appendChild(el('div', { 'class': 'notice', style: 'margin-top:14px' }, 'No shifts for ' + onlyClient.name + ' in this period.'));
   workers.forEach(function(w){
@@ -389,7 +389,7 @@ function viewPay(main){
       while ((mkm = re.exec(n.body || ''))) kmSum += parseFloat(mkm[1]);
     });
     var r = w.rates || {};
-    var kmRate = +(state.data.settings.km_rate || 0);
+    var kmRate = (r.km != null && r.km !== '') ? +r.km : +(state.data.settings.km_rate || 0);
     var total = hWd * (+r.weekday || 0) + hSat * (+r.saturday || 0) + hSun * (+r.sunday || 0) + flatAmt + kmSum * kmRate;
     var inv = state.data.invoices.find(function(x){ return x.worker_id === w.id && x.fort_start === fs; });
     grand += total; grandN += mine.length;
@@ -714,6 +714,7 @@ function openRates(w){
   var r = {};
   var cur = w.rates || {};
   ['weekday','saturday','sunday'].forEach(function(k){ r[k] = cur[k] != null ? cur[k] : 0; });
+  if (cur.km != null && cur.km !== '') r.km = cur.km;
   function rateField(label, key, hint){
     return el('div', { 'class': 'field' }, [
       el('label', null, label),
@@ -730,7 +731,13 @@ function openRates(w){
     el('div', { 'class': 'modal-body' }, [
       rateField('Weekday ($/h)', 'weekday'),
       rateField('Saturday ($/h)', 'saturday'),
-      rateField('Sunday ($/h)', 'sunday', 'No Sunday shifts at the moment — set to the Saturday rate as a default.')
+      rateField('Sunday ($/h)', 'sunday', 'No Sunday shifts at the moment — set to the Saturday rate as a default.'),
+      el('div', { 'class': 'field' }, [
+        el('label', null, 'Kilometres ($/km)'),
+        el('input', { 'class': 'inp t-num', type: 'number', inputmode: 'decimal', step: '0.01', min: '0', placeholder: String(+(state.data.settings.km_rate || 0)), value: r.km != null ? String(r.km) : '',
+          oninput: function(e){ if (e.target.value === '') delete r.km; else r.km = parseFloat(e.target.value) || 0; } }),
+        el('div', { 'class': 'hint' }, 'Leave blank to use the standard rate (' + money(+(state.data.settings.km_rate || 0)) + '/km).')
+      ])
     ]),
     el('div', { 'class': 'modal-foot' }, [
       el('div', { 'class': 'spacer' }),
