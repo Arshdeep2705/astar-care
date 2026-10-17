@@ -245,8 +245,7 @@ function sumMetricsRow(ds){
     anMetric('Near misses recorded', m.nearMisses.value, 'near misses', m.nearMisses.note),
     anMetric('Assisted transfers recorded', m.transfers.value, 'transfers', m.transfers.note),
     anMetric('Incidents involving an emergency call', m.emergency.value, 'of ' + m.emergency.of, 'attendance is not recorded on the form'),
-    anMetric('Average recorded overnight assistance', m.overnightAvg.value, 'h per night', m.overnightAvg.note, { hours: true, insufficient: true }),
-    anMetric('Nights with complete overnight data', m.nightsUsable.value, 'of ' + m.nightsUsable.of + ' in scope', m.nightsUsable.note, { insufficient: true })
+    anMetric('Average recorded overnight assistance', m.overnightAvg.value, 'h per night', m.overnightAvg.note, { hours: true, insufficient: true })
   ]);
 }
 function sumNightBars(ds, height){
@@ -296,10 +295,7 @@ function sumOvernight(doc, ds, c){
   var o = ds.overnight;
   doc.appendChild(el('div', { 'class': 'an-metrics' }, [
     anMetric('Nights in scope', o.inScope, 'finished nights', o.notYet ? o.notYet + ' not yet finished' : null),
-    anMetric('Complete usable data', o.inScope ? o.complete : null, 'of ' + o.inScope, 'summary with hours', { insufficient: true }),
-    anMetric('Partial · not recorded', o.inScope ? o.partial + ' · ' + o.missing : null, '', 'partial = record without hours, or intervals only', { insufficient: true }),
-    anMetric('Average assistance', o.avgAssist.hours, 'h per night', 'n = ' + o.avgAssist.n + ' of ' + o.inScope + (o.avgAssist.n - o.avgAssist.fromSummary ? ' (' + (o.avgAssist.n - o.avgAssist.fromSummary) + ' from intervals)' : ''), { hours: true, insufficient: true }),
-    anMetric('Recorded support episodes', o.episodes.n || null, 'episodes', o.episodes.nights ? 'on ' + o.episodes.nights + ' night' + (o.episodes.nights === 1 ? '' : 's') + ' with reviewed events' : 'from reviewed observations only', { insufficient: true })
+    anMetric('Average assistance', o.avgAssist.hours, 'h per night', 'n = ' + o.avgAssist.n + ' of ' + o.inScope + (o.avgAssist.n - o.avgAssist.fromSummary ? ' (' + (o.avgAssist.n - o.avgAssist.fromSummary) + ' from intervals)' : ''), { hours: true, insufficient: true })
   ]));
   doc.appendChild(anSec('Night-by-night assistance duration', 'Elapsed worker assistance inside 23:00–07:00 (hours). Complete = overnight summary with hours; partial = reviewed intervals only or summary without hours; not recorded = no record.', o.rows.length ? [
     sumNightBars(ds, 200), anLegend([{ c: RP_C.acc, l: 'Complete (overnight summary)' }, { c: RP_C.acc, hatch: true, l: 'Partial (what is recorded only)' }, { c: '', dash: true, l: 'Not recorded' }]),
@@ -322,21 +318,19 @@ function sumIncidents(doc, ds, c){
   doc.appendChild(el('div', { 'class': 'an-metrics' }, [
     anMetric('Incident reports', I.n, 'reports', I.list.filter(function(e){ return e.kind === 'observation'; }).length ? I.list.filter(function(e){ return e.kind === 'observation'; }).length + ' from reviewed documents' : null),
     anMetric('Falls', I.falls, 'of ' + I.n, I.transfers.yes ? I.transfers.yes + ' during a transfer (recorded)' + (I.transfers.inferred ? ', ' + I.transfers.inferred + ' inferred from location' : '') : null),
-    anMetric('Involving emergency services', I.emergencyInvolved, 'of ' + I.n, 'a call was recorded; attendance is not on the form'),
-    anMetric('Injuries recorded', I.injuriesYes, 'of ' + I.n, I.injuriesUnknown ? I.injuriesUnknown + ' not answered (unknown)' : null)
+    anMetric('Involving emergency services', I.emergencyInvolved, 'of ' + I.n, 'a call was recorded; attendance is not on the form')
   ]));
   doc.appendChild(anSec('Incidents and falls over time', 'Recorded per ' + ds.series.mode + '. Zero bars mean no recorded event, not complete observation where records are missing.', [
     sumSeriesChart(ds, ['incidents', 'falls'], [{ label: 'Incidents', color: RP_C.acc }, { label: 'Falls', color: RP_C.bad }]), anLegend([{ c: RP_C.acc, l: 'All incidents' }, { c: RP_C.bad, l: 'Falls' }]),
     anTableToggle('Show as a table', sumSeriesTable(ds, [['incidents', 'Incidents'], ['falls', 'Falls']]))
   ]));
-  doc.appendChild(el('div', { 'class': 'an-grid3' }, [
+  doc.appendChild(el('div', { 'class': 'an-grid2' }, [
     anSec('Incident types', 'As ticked on the form; one incident can have several types.', [ anHBars(I.byType.map(function(t){ return { label: t.key, n: t.n }; })) ]),
-    anSec('Where falls happened', 'Location as recorded. A location does not say whether a transfer was in progress.', [ anHBars(I.byLocation.map(function(t){ return { label: t.key, n: t.n }; }), { empty: 'No falls recorded.' }) ]),
-    anSec('Injury answer', 'The worker’s answer to the injury question. Unanswered stays unknown.', [ anHBars(I.byInjury.filter(function(t){ return t.n; }).map(function(t){ return { label: t.key, n: t.n }; }), { empty: 'No incidents recorded.' }) ])
+    anSec('Where falls happened', 'Location as recorded. A location does not say whether a transfer was in progress.', [ anHBars(I.byLocation.map(function(t){ return { label: t.key, n: t.n }; }), { empty: 'No falls recorded.' }) ])
   ]));
   doc.appendChild(anSec('Incident records', 'Short facts from each record. Open the original for the full form.', I.list.length ? [
-    rpTable([ 'Date · time', 'Type', 'Location', 'Description', 'Response / outcome', 'Emergency', 'Injury', '' ], I.list.map(function(e){
-      return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), e.types.join(', ') + (e.isFall ? ' · fall' : '') + (e.kind === 'observation' ? ' (reviewed doc.)' : ''), e.location || '—', (e.description || '').slice(0, 160) + ((e.description || '').length > 160 ? '…' : ''), [ e.response, e.outcome ].filter(Boolean).join(' · ').slice(0, 160) || '—', e.emergency.length ? e.emergency.join(', ') : '—', e.injuries === 'yes' ? 'Yes' + (e.injuryKind ? ' · ' + e.injuryKind : '') : (e.injuries === 'no' ? 'No injury recorded' : 'Not answered'),
+    rpTable([ 'Date · time', 'Type', 'Location', 'Description', 'Response / outcome', 'Emergency', '' ], I.list.map(function(e){
+      return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), e.types.join(', ') + (e.isFall ? ' · fall' : '') + (e.kind === 'observation' ? ' (reviewed doc.)' : ''), e.location || '—', (e.description || '').slice(0, 160) + ((e.description || '').length > 160 ? '…' : ''), [ e.response, e.outcome ].filter(Boolean).join(' · ').slice(0, 160) || '—', e.emergency.length ? e.emergency.join(', ') : '—',
         el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ anOpenRecord(e.kind === 'report' ? 'incident' : 'observation', e.id); } }, 'Open') ];
     }))
   ] : [ anEmpty('No incident reports in this period.') ], { cls: 'an-sec-long' }));
@@ -676,7 +670,7 @@ function viewSumDoc(main){
   var meas = ds.care.measures.filter(function(m){ return m.recorded > 0; });
   doc.appendChild(anSec('Transfers and personal care', 'Structured counts from the personal care log; totals are over the logs that answered.', ds.care.logs ? [ el('div', { 'class': 'an-grid2' }, [ el('div', null, [ el('div', { 'class': 'an-sub' }, 'Assisted transfers per ' + ds.series.mode), anSeries(ds.series.buckets.map(function(k){ return { label: ds.series.mode === 'day' ? fmtDM(k.key) : 'wk ' + fmtDM(k.key), vals: [k.transfers] }; }), [{ label: 'Assisted transfers', color: RP_C.acc }], { height: 160, width: 460 }), anCaption(ds.metrics.transfers.value == null ? 'Transfers not recorded' : ds.metrics.transfers.value + ' transfers · ' + ds.metrics.transfers.note) ]), el('div', null, [ el('div', { 'class': 'an-sub' }, 'Care measures'), anHBars(meas.map(function(m){ return { label: m.label, n: m.total, note: 'in ' + m.recorded + ' of ' + m.of + ' logs' }; })) ]) ]) ] : [ anEmpty('No personal care logs in this period.') ]));
   if (o.overnight) doc.appendChild(anSec('Overnight detail', 'One row per night the shift started. Wakes exclude the final wake.', [ sumNightTable(ds), ov.timeline.length ? anTimeline(ov.timeline, ov.rows) : null, ov.byActivity.length ? anHBars(ov.byActivity.map(function(a){ return { label: a.activity, n: a.episodes, note: a.hours != null ? '· ' + hrsFmt(a.hours) + ' h timed' : '' }; })) : null ], { cls: 'an-sec-long an-break' }));
-  if (o.incidents) doc.appendChild(anSec('Incident detail', ds.incidents.n + ' incident report' + (ds.incidents.n === 1 ? '' : 's') + ' · ' + ds.incidents.falls + ' falls · ' + ds.incidents.emergencyInvolved + ' involving an emergency call · injuries recorded ' + ds.incidents.injuriesYes + ', not answered ' + ds.incidents.injuriesUnknown, ds.incidents.list.length ? [ rpTable([ 'Date · time', 'Type', 'Location', 'Description', 'Response / outcome', 'Emergency', 'Injury' ], ds.incidents.list.map(function(e){ return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), e.types.join(', ') + (e.isFall ? ' · fall' : ''), e.location || '—', (e.description || '').slice(0, 200), [ e.response, e.outcome ].filter(Boolean).join(' · ').slice(0, 200) || '—', e.emergency.join(', ') || '—', e.injuries === 'yes' ? 'Yes' : e.injuries === 'no' ? 'No injury recorded' : 'Not answered' ]; })) ] : [ anEmpty('No incident reports.') ], { cls: 'an-sec-long an-break' }));
+  if (o.incidents) doc.appendChild(anSec('Incident detail', ds.incidents.n + ' incident report' + (ds.incidents.n === 1 ? '' : 's') + ' · ' + ds.incidents.falls + ' falls · ' + ds.incidents.emergencyInvolved + ' involving an emergency call', ds.incidents.list.length ? [ rpTable([ 'Date · time', 'Type', 'Location', 'Description', 'Response / outcome', 'Emergency' ], ds.incidents.list.map(function(e){ return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), e.types.join(', ') + (e.isFall ? ' · fall' : ''), e.location || '—', (e.description || '').slice(0, 200), [ e.response, e.outcome ].filter(Boolean).join(' · ').slice(0, 200) || '—', e.emergency.join(', ') || '—' ]; })) ] : [ anEmpty('No incident reports.') ], { cls: 'an-sec-long an-break' }));
   if (o.near) doc.appendChild(anSec('Near miss detail', ds.nearMisses.n + ' recorded · ' + ds.nearMisses.equipment + ' linked to equipment', ds.nearMisses.list.length ? [ rpTable([ 'Date · time', 'Location · activity', 'What nearly happened', 'What prevented it' ], ds.nearMisses.list.map(function(e){ return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), (e.location || '—') + (e.transfer === 'yes' ? ' · during a transfer' : ''), (e.description || '').slice(0, 200), (e.prevented || '—').slice(0, 200) ]; })) ] : [ anEmpty('No near misses.') ], { cls: 'an-sec-long an-break' }));
   if (o.appendix) doc.appendChild(anSec('Appendix: sources, records and definitions', 'The records and sources this document was computed from, as frozen with it.', [
     el('div', { 'class': 'an-sub' }, 'Record ids'), el('div', { 'class': 't-cap' }, 'Incident reports ' + ds.recordIds.incidents.length + ' · near misses ' + ds.recordIds.nearMisses.length + ' · care logs ' + ds.recordIds.careLogs.length + ' · overnight summaries ' + ds.recordIds.overnightLogs.length + ' · accepted observations ' + ds.recordIds.observations.length),

@@ -292,8 +292,7 @@ function evExportModel(ds){
       { label: 'Near misses recorded', value: m.nearMisses.value, unit: m.nearMisses.unit, note: m.nearMisses.note },
       { label: 'Assisted transfers recorded', value: m.transfers.value, unit: m.transfers.unit, note: m.transfers.note },
       { label: 'Incidents involving an emergency call', value: m.emergency.value, unit: m.emergency.unit, note: m.emergency.note },
-      { label: 'Average recorded overnight assistance', value: m.overnightAvg.value, unit: m.overnightAvg.unit, note: m.overnightAvg.note },
-      { label: 'Nights with complete overnight data', value: m.nightsUsable.value, unit: m.nightsUsable.of + ' in scope', note: m.nightsUsable.note }
+      { label: 'Average recorded overnight assistance', value: m.overnightAvg.value, unit: m.overnightAvg.unit, note: m.overnightAvg.note }
     ],
     coverage: ds.coverage, sourceIndex: ds.sourceIndex, recordIds: ds.recordIds };
 }
