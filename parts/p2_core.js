@@ -313,7 +313,7 @@ var state = {
   loading: true,
   loadErr: null,
   pwChange: null,       // {token, workerId, name} during forced password change
-  data: { settings:null, clients:[], reqs:[], workers:[], shifts:[], notes:[], incidents:[], reminders:[], flags:[], avail:[], clocks:[], invoices:[], enums:{}, nearMisses:[], careLogs:[], overnightLogs:[], roc:[] }
+  data: { settings:null, clients:[], reqs:[], workers:[], shifts:[], notes:[], incidents:[], reminders:[], flags:[], avail:[], clocks:[], invoices:[], enums:{}, nearMisses:[], careLogs:[], overnightLogs:[], roc:[], publish:[] }
 };
 var ui = {};            // scratch for modal state
 
@@ -367,6 +367,9 @@ function loadAll(){
     sbSel('ac_overnight_logs', 'select=*&limit=5000'),
     state.auth && state.auth.mode === 'admin'
       ? sbSel('ac_care_roster', 'select=*&date=gte.' + from + '&date=lte.' + to + '&order=date')["catch"](function(){ return []; })
+      : Promise.resolve([]),
+    state.auth && state.auth.mode === 'admin'
+      ? sbSel('ac_roster_publish', 'select=*')["catch"](function(){ return []; })
       : Promise.resolve([])
   ]).then(function(r){
     D.settings = r[0][0] || { org_name:'Astar Health Service', km_rate:0.99, week_anchor: mondayOf(todayYmd()), fortnight_anchor: mondayOf(todayYmd()) };
@@ -375,6 +378,7 @@ function loadAll(){
     D.avail = r[9]; D.clocks = r[10]; D.invoices = r[11];
     D.nearMisses = r[13] || []; D.careLogs = r[14] || []; D.overnightLogs = r[15] || [];
     D.roc = r[16] || [];
+    D.publish = r[17] || [];
     D.enums = {};
     (r[12] || []).forEach(function(e){ D.enums[e.name] = e.values; });
     state.loading = false;

@@ -137,10 +137,53 @@ function viewRoster(main){
   var mobile = window.innerWidth < 860;
   for (var wk = 0; wk < days.length / 7; wk++) {
     var wkDays = days.slice(wk * 7, wk * 7 + 7);
+    var pb = publishBar(wkDays[0]);
+    if (pb) main.appendChild(pb);
     if (mobile) main.appendChild(rosterMobileWeek(wkDays, rows, t));
     else main.appendChild(rosterWeekGrid(wkDays, groups, t));
   }
   main.appendChild(rosterLegend());
+}
+
+/* PUBLISH (owner, 23 Oct 2026): workers see the current week and earlier automatically; any
+   later week stays hidden from them (database rule) until it is published here. */
+function weekPublished(mon){ return state.data.publish.some(function(p){ return p.week_start === mon; }); }
+function publishBar(mon){
+  if (mon <= mondayOf(todayYmd())) return null;
+  var range = fmtDate(mon) + ' – ' + fmtDate(addDays(mon, 6));
+  if (weekPublished(mon)) {
+    return el('div', { 'class': 'banner', style: 'margin:14px 0 0;background:var(--ok-soft, #e6f4ea);align-items:center' }, [
+      el('div', { style: 'flex:1;min-width:0' }, [ el('b', { style: 'font-size:14px' }, 'Published'), el('div', { 'class': 't-cap' }, range + ' · workers can see this week.') ]),
+      el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ unpublishWeek(mon); } }, 'Unpublish')
+    ]);
+  }
+  return el('div', { 'class': 'banner warn', style: 'margin:14px 0 0;align-items:center' }, [
+    el('div', { style: 'flex:1;min-width:0' }, [ el('b', { style: 'font-size:14px' }, 'Draft · not published'), el('div', { 'class': 't-cap' }, range + ' · workers can’t see this week until you publish it.') ]),
+    el('button', { 'class': 'btn btn-sm btn-pri', onclick: function(e){ publishWeek(mon, e.currentTarget); } }, 'Publish')
+  ]);
+}
+function publishWeek(mon, btn){
+  var end = addDays(mon, 6);
+  var ids = [];
+  state.data.shifts.forEach(function(s){ if (s.worker_id && s.date >= mon && s.date <= end && ids.indexOf(s.worker_id) < 0) ids.push(s.worker_id); });
+  confirmDlg('Publish ' + fmtDate(mon) + ' – ' + fmtDate(end) + '?',
+    'Workers will see their shifts for this week straight away' + (ids.length ? ', and ' + ids.length + (ids.length === 1 ? ' worker gets' : ' workers get') + ' a notification that their roster is out.' : '.') + ' Changes you make after publishing show up for them as usual.',
+    'Publish', function(){
+      if (btn) btn.disabled = true;
+      sbIns('ac_roster_publish', [{ week_start: mon }])
+        .then(function(){
+          if (ids.length) sendPush(ids, 'Your roster is out', 'Roster for ' + fmtDate(mon) + ' – ' + fmtDate(end) + ' is ready. Open Astar Care to see your shifts.');
+          toast('Published ' + fmtDate(mon) + ' – ' + fmtDate(end)); refresh();
+        })
+        ["catch"](function(err){ if (btn) btn.disabled = false; toast(err.message, true); refresh(); });
+    });
+}
+function unpublishWeek(mon){
+  confirmDlg('Unpublish this week?', 'Workers will stop seeing their shifts for ' + fmtDate(mon) + ' – ' + fmtDate(addDays(mon, 6)) + ' until you publish it again. Nobody is notified.', 'Unpublish', function(){
+    sbDel('ac_roster_publish', 'week_start=eq.' + mon)
+      .then(function(){ toast('Unpublished'); refresh(); })
+      ["catch"](function(err){ toast(err.message, true); });
+  }, true);
 }
 
 /* one tap fills the visible week with last week's shifts (same workers),
@@ -163,7 +206,8 @@ function copyLastWeek(){
   if (!rows.length) { toast('Nothing to copy — this week already has last week’s shifts.'); return; }
   confirmDlg('Copy last week?',
     'Copies ' + rows.length + ' shift' + (rows.length === 1 ? '' : 's') + ' (same workers) from ' +
-    fmtDate(addDays(anchor, -7)) + ' – ' + fmtDate(addDays(anchor, -1)) + ' into this week. Slots already filled are left alone.',
+    fmtDate(addDays(anchor, -7)) + ' – ' + fmtDate(addDays(anchor, -1)) + ' into this week. Slots already filled are left alone.' +
+    (anchor > mondayOf(todayYmd()) && !weekPublished(anchor) ? ' Workers won’t see this week until you press Publish.' : ''),
     'Copy ' + rows.length + ' shifts',
     function(){
       sbIns('ac_shifts', rows)
