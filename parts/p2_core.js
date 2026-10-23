@@ -614,6 +614,19 @@ if (window.visualViewport) {
     t.style.transform = 'translateX(-50%) translateY(-' + Math.max(0, off) + 'px)';
   });
 }
+/* toast with an Undo button — used by the one-tap shortcuts instead of a confirmation */
+function toastUndo(msg, undo){
+  var done = false;
+  var t = el('div', { 'class': 'toast', style: 'pointer-events:auto;display:flex;align-items:center;gap:14px' }, [
+    el('span', null, msg),
+    el('button', { style: 'color:#9fe3d8;font-weight:700;text-decoration:underline;flex:none', onclick: function(){
+      if (done) return; done = true; t.remove(); undo();
+    } }, 'Undo')
+  ]);
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(function(){ done = true; t.style.transition = 'opacity .25s'; t.style.opacity = '0';
+    setTimeout(function(){ t.remove(); }, 260); }, 7000);
+}
 function toast(msg, isErr){
   var t = el('div', { 'class': 'toast' + (isErr ? ' err' : '') }, msg);
   document.getElementById('toasts').appendChild(t);

@@ -33,7 +33,10 @@ function viewInbox(main){
     return s.worker_id && !s.note_waived && s.date >= addDays(t, -14) && shiftEnded(s) && shiftNotesForShift(s.id).length === 0;
   }).sort(function(a,b){ return a.date < b.date ? 1 : -1; });
   var secO = el('div', { 'class': 'section' });
-  secO.appendChild(el('div', { 'class': 't-label', style: 'margin-bottom:4px' }, 'Outstanding shift notes'));
+  secO.appendChild(el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:4px' }, [
+    el('div', { 'class': 't-label', style: 'flex:1' }, 'Outstanding shift notes'),
+    outstanding.length > 1 ? el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ waiveNotes(outstanding); } }, 'Waive all (' + outstanding.length + ')') : null
+  ]));
   secO.appendChild(el('p', { 'class': 't-cap', style: 'margin-bottom:10px' }, 'Finished shifts from the last 14 days with no Progress Note yet. A mileage-only entry does not count as the shift note. "Waive" stops the reminders for that shift; it does not delete anything.'));
   if (!outstanding.length) {
     secO.appendChild(el('div', { 'class': 'card empty', style: 'padding:24px' }, [
@@ -52,13 +55,7 @@ function viewInbox(main){
         ]),
         el('div', { 'class': 'row-actions' }, [
         w ? el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ openReminder(s, w); } }, 'Send reminder') : null,
-        el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(e){
-          confirmDlg('Waive the note for this shift?', 'The shift stays on the roster and nothing is deleted. It just stops being chased and drops off this list. You can still add a note later.', 'Waive note', function(){
-            sbUpd('ac_shifts', 'id=eq.' + s.id, { note_waived: true })
-              .then(function(){ toast('Note waived for ' + fmtDate(s.date) + ' — no more reminders for this shift'); refresh(); })
-              ["catch"](function(err){ toast(err.message, true); });
-          });
-        } }, 'Waive note')
+        el('button', { 'class': 'btn btn-sm btn-ghost', onclick: function(){ waiveNotes([s]); } }, 'Waive note')
         ])
       ]));
     });
@@ -708,6 +705,20 @@ function openAddWorker(){
     ])
   ]);
   openModal(m);
+}
+
+/* waive one or many outstanding notes in one go — no confirmation, Undo in the toast */
+function waiveNotes(list){
+  var ids = list.map(function(s){ return s.id; });
+  if (!ids.length) return;
+  var q = 'id=in.(' + ids.join(',') + ')';
+  sbUpd('ac_shifts', q, { note_waived: true })
+    .then(function(){
+      refresh();
+      toastUndo(ids.length === 1 ? 'Note waived for ' + fmtDate(list[0].date) : ids.length + ' notes waived', function(){
+        sbUpd('ac_shifts', q, { note_waived: false }).then(function(){ toast('Undone'); refresh(); })["catch"](function(err){ toast(err.message, true); });
+      });
+    })["catch"](function(err){ toast(err.message, true); });
 }
 
 function openRates(w){

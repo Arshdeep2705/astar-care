@@ -468,6 +468,9 @@ input,select,textarea{font:inherit;color:inherit}
 .rw-chip.gap{background:var(--bad-soft);color:var(--bad);border:1px dashed #E3B1AB}
 .rw-chip .rc-t{display:block;font-size:12px;font-weight:500;opacity:.85;font-variant-numeric:tabular-nums}
 .rw-chip.off{background:transparent;color:var(--line-2);cursor:default;text-align:center}
+.rw-chip[draggable=true]{cursor:grab}
+.rw-chip.dragging{opacity:.45}
+.rw-chip.drop{outline:2px dashed var(--acc);outline-offset:2px}
 @media(max-width:860px){
   .rw-grid,.rw-row{display:block;border:0;background:none}
   .rw-hidehead{display:none}

@@ -243,7 +243,108 @@ function rosterLegend(){
     el('span', null, '☾ sleepover · "part" = a split slot')
   ]);
 }
+/* ROSTER SHORTCUTS (owner, 23 Oct 2026): drag a worker's shift onto another shift to swap
+   the workers, or onto a "Needs cover" slot to move the worker there (the old slot becomes
+   Needs cover). Point at (or tab to) a shift and press Delete/Backspace to take the worker off
+   it (Needs cover). Every shortcut has Undo in the toast instead of a confirmation. */
+var rosterKeys = { dragId: null, target: null };
+function chipShortcuts(btn, s, row, d){
+  if (s && s.worker_id && window.matchMedia && window.matchMedia('(hover: hover)').matches) {
+    btn.setAttribute('draggable', 'true');
+    btn.title = (btn.title ? btn.title + ' · ' : '') + 'Drag onto another shift to swap or move the worker · Delete key = Needs cover';
+    btn.addEventListener('dragstart', function(e){
+      rosterKeys.dragId = s.id; btn.classList.add('dragging');
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.id); } catch (x) {}
+    });
+    btn.addEventListener('dragend', function(){ rosterKeys.dragId = null; btn.classList.remove('dragging'); });
+  }
+  function aim(){ rosterKeys.target = { s: s, row: row, d: d }; }
+  function unaim(){ if (rosterKeys.target && rosterKeys.target.s === s && rosterKeys.target.d === d) rosterKeys.target = null; }
+  btn.addEventListener('mouseenter', aim); btn.addEventListener('focus', aim);
+  btn.addEventListener('mouseleave', unaim); btn.addEventListener('blur', unaim);
+  btn.addEventListener('dragover', function(e){
+    if (!rosterKeys.dragId || (s && s.id === rosterKeys.dragId)) return;
+    e.preventDefault(); btn.classList.add('drop');
+  });
+  btn.addEventListener('dragleave', function(){ btn.classList.remove('drop'); });
+  btn.addEventListener('drop', function(e){
+    e.preventDefault(); btn.classList.remove('drop');
+    var src = rosterKeys.dragId ? shiftById(rosterKeys.dragId) : null;
+    rosterKeys.dragId = null;
+    if (src && src !== s) rosterDropOn(src, s, row, d);
+  });
+  return btn;
+}
+function unassignShift(s){
+  var prev = s.worker_id, w = workerById(prev), c = clientById(s.client_id);
+  if (!prev) return;
+  sbUpd('ac_shifts', 'id=eq.' + s.id, { worker_id: null })
+    .then(function(){
+      refresh();
+      toastUndo((w ? w.name : 'Worker') + ' taken off ' + (c ? c.name : '') + ' ' + fmtDate(s.date) + ' — now Needs cover', function(){
+        sbUpd('ac_shifts', 'id=eq.' + s.id, { worker_id: prev }).then(function(){ toast('Undone'); refresh(); })["catch"](function(err){ toast(err.message, true); });
+      });
+    })["catch"](function(err){ toast(err.message, true); });
+}
+function rosterDropOn(src, dst, row, d){
+  var wa = src.worker_id, A = workerById(wa);
+  if (!wa) return;
+  var undoSteps = [], p;
+  if (!dst) {
+    /* empty slot: create the shift there for this worker, free the old one */
+    p = sbIns('ac_shifts', [{ client_id: row.client.id, req_id: row.req.id, date: d, start_t: row.req.start_t, end_t: row.req.end_t, type: row.req.type, worker_id: wa }])
+      .then(function(rows){
+        undoSteps.push(function(){ return sbDel('ac_shifts', 'id=eq.' + rows[0].id); });
+        return sbUpd('ac_shifts', 'id=eq.' + src.id, { worker_id: null });
+      }).then(function(){ undoSteps.push(function(){ return sbUpd('ac_shifts', 'id=eq.' + src.id, { worker_id: wa }); }); return (A ? A.name : 'Worker') + ' moved to ' + fmtDate(d); });
+  } else if (!dst.worker_id) {
+    p = sbUpd('ac_shifts', 'id=eq.' + dst.id, { worker_id: wa })
+      .then(function(){ undoSteps.push(function(){ return sbUpd('ac_shifts', 'id=eq.' + dst.id, { worker_id: null }); }); return sbUpd('ac_shifts', 'id=eq.' + src.id, { worker_id: null }); })
+      .then(function(){ undoSteps.push(function(){ return sbUpd('ac_shifts', 'id=eq.' + src.id, { worker_id: wa }); }); return (A ? A.name : 'Worker') + ' moved to ' + fmtDate(dst.date); });
+  } else {
+    var wb = dst.worker_id, B = workerById(wb);
+    p = sbUpd('ac_shifts', 'id=eq.' + dst.id, { worker_id: wa })
+      .then(function(){ undoSteps.push(function(){ return sbUpd('ac_shifts', 'id=eq.' + dst.id, { worker_id: wb }); }); return sbUpd('ac_shifts', 'id=eq.' + src.id, { worker_id: wb }); })
+      .then(function(){ undoSteps.push(function(){ return sbUpd('ac_shifts', 'id=eq.' + src.id, { worker_id: wa }); }); return 'Swapped ' + (A ? A.name : '?') + ' and ' + (B ? B.name : '?'); });
+  }
+  p.then(function(msg){
+    refresh();
+    toastUndo(msg, function(){
+      var chain = Promise.resolve();
+      undoSteps.slice().reverse().forEach(function(f){ chain = chain.then(f); });
+      chain.then(function(){ toast('Undone'); refresh(); })["catch"](function(err){ toast(err.message, true); refresh(); });
+    });
+  })["catch"](function(err){
+    /* roll back whatever part already saved */
+    var chain = Promise.resolve();
+    undoSteps.slice().reverse().forEach(function(f){ chain = chain.then(f); });
+    chain.then(refresh, refresh);
+    toast('Could not move the shift: ' + err.message, true);
+  });
+}
+document.addEventListener('keydown', function(e){
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  if (!isAdmin() || state.preview) return;
+  var ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return;
+  if (document.getElementById('ac-confirm')) return;
+  var modal = document.getElementById('ac-modal');
+  if (modal) {
+    var sid = modal.querySelector('[data-shift-id]');
+    var sm = sid ? shiftById(sid.getAttribute('data-shift-id')) : null;
+    if (sm && sm.worker_id) { e.preventDefault(); closeModal(); unassignShift(sm); }
+    return;
+  }
+  if (state.adminTab !== 'roster' || !rosterKeys.target || !rosterKeys.target.s || !rosterKeys.target.s.worker_id) return;
+  e.preventDefault();
+  unassignShift(rosterKeys.target.s);
+  rosterKeys.target = null;
+});
+
 function rosterChip(s, row, d){
+  return chipShortcuts(rosterChipEl(s, row, d), s, row, d);
+}
+function rosterChipEl(s, row, d){
   var pre = (s ? s.type : row.req.type) === 'sleepover' ? '☾ ' : '';
   if (!s) {
     return el('button', { 'class': 'rw-chip gap', onclick: function(e){ gapCreateShift(row, d, e.currentTarget); } }, [
@@ -545,9 +646,10 @@ function openAdminShift(s){
       el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     body,
-    el('div', { 'class': 'modal-foot', style: 'flex-wrap:wrap' }, [
+    el('div', { 'class': 'modal-foot', style: 'flex-wrap:wrap', 'data-shift-id': s.id }, [
       el('button', { 'class': 'btn btn-ghost', onclick: closeModal }, 'Close'),
       el('div', { 'class': 'spacer' }),
+      w ? el('button', { 'class': 'btn btn-sm btn-ghost', style: 'color:var(--bad)', title: 'Shortcut: Delete key', onclick: function(){ closeModal(); unassignShift(s); } }, 'Make Needs cover') : null,
       el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ openNoteModal({ shift: s, worker: w || me() }); } }, 'Add note'),
       needsReminder ? el('button', { 'class': 'btn btn-sec btn-sm', onclick: function(){ openReminder(s, w); } }, [svgIcon(IC.bell), 'Send reminder']) : null,
       el('button', { 'class': 'btn btn-dark btn-sm', onclick: function(){ openEditRoster(s); } }, 'Edit shift')
