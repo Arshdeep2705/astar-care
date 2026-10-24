@@ -500,6 +500,7 @@ function startRealtime(){
       setTimeout(function(){ if (rt.pending && !liveGuarded()) scheduleLive(); }, 50);
     });
     checkVersion();
+    setTimeout(checkPushHealth, 1500);
   }
   if (rt.ws || !window.WebSocket) return;
   try {
@@ -537,6 +538,29 @@ function stopRealtime(){
 
 /* ================= push notifications ================= */
 function pushSupported(){ return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+/* New phone / restored iCloud backup (owner, 24 Oct 2026): the "notifications on" flag is copied
+   across but the push registration is not, so the app thought it was on and never asked again.
+   On every start: if this device has no real push subscription, clear the flag (and any
+   "Not now") so the Turn on prompt comes back; if it has one, make sure the server knows it. */
+function checkPushHealth(){
+  if (!pushSupported() || state.preview || !state.auth) return;
+  var flagKey = 'ac_push_on_' + PORTAL, dismissKey = PORTAL === 'admin' ? 'ac_push_dismiss_admin' : 'ac_push_dismiss';
+  function reset(){
+    if (localStorage.getItem(flagKey) === '1' || localStorage.getItem(dismissKey)) {
+      localStorage.removeItem(flagKey); localStorage.removeItem(dismissKey);
+      if (!liveGuarded()) render();
+    }
+  }
+  if (Notification.permission !== 'granted') { reset(); return; }
+  navigator.serviceWorker.getRegistration('/sw.js')
+    .then(function(reg){ return reg ? reg.pushManager.getSubscription() : null; })
+    .then(function(sub){
+      if (!sub) { reset(); return; }
+      var wid = myPushWorkerId();
+      if (wid) sbUpsert('ac_push_subs', [{ worker_id: wid, endpoint: sub.endpoint, sub: sub.toJSON() }], 'worker_id,endpoint')["catch"](function(){});
+      if (localStorage.getItem(flagKey) !== '1') { localStorage.setItem(flagKey, '1'); if (!liveGuarded()) render(); }
+    })["catch"](function(){});
+}
 function pushEnabled(){
   return pushSupported() && Notification.permission === 'granted' && localStorage.getItem('ac_push_on_' + PORTAL) === '1';
 }
