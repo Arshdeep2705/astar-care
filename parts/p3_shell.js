@@ -217,9 +217,54 @@ function workerNavItems(){
     { id: 'avail', label: 'Availability', ic: IC.clock }
   ];
 }
+/* NOTIFICATIONS REQUIRED (owner, 26 Oct 2026): a worker can't use the app until shift and
+   clock reminders can reach this phone. 'install' = iPhone/iPad opened in Safari (push only
+   works from the Home Screen icon) · 'denied' = blocked in phone settings · 'off' = not turned
+   on yet · null = fine, or a browser that can't do push at all (never locked out). */
+function pushGateKind(){
+  if (state.preview) return null;
+  var ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  if (!pushSupported()) return (ios && !standalone) ? 'install' : null;
+  if (pushEnabled()) return null;
+  return Notification.permission === 'denied' ? 'denied' : 'off';
+}
+function renderPushGate(app, w, kind){
+  var ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  var steps = kind === 'install' ? [
+      'Tap the Share button at the bottom of Safari (the square with the arrow).',
+      'Choose "Add to Home Screen", then tap Add.',
+      'Close Safari and open Astar Care from the new icon on your Home Screen.',
+      'Sign in, then tap "Turn on notifications" and Allow.'
+    ] : kind === 'denied' ? (ios ? [
+      'Open the iPhone Settings app.',
+      'Go to Notifications, then Astar Care.',
+      'Switch on Allow Notifications.',
+      'Come back to Astar Care and tap "I\u2019ve turned them on".'
+    ] : [
+      'Open your phone Settings, then Apps (or Applications).',
+      'Find Chrome (or Astar Care), then Notifications, and allow them.',
+      'Come back to Astar Care and tap "I\u2019ve turned them on".'
+    ]) : [];
+  var card = el('div', { 'class': 'card card-pad', style: 'max-width:460px;margin:40px auto;text-align:left' }, [
+    el('div', { style: 'color:var(--acc);margin-bottom:10px' }, svgIcon(IC.bell)),
+    el('div', { 'class': 't-title', style: 'margin-bottom:8px' }, kind === 'install' ? 'Add Astar Care to your Home Screen' : 'Turn on notifications to continue'),
+    el('p', { 'class': 't-mut', style: 'font-size:14px;margin-bottom:14px' }, 'Hi ' + firstName(w.name) + '. Notifications are required to use Astar Care: they remind you before each shift and if you forget to clock in or out, so your hours are recorded and paid correctly.'),
+    steps.length ? el('ol', { style: 'margin:0 0 16px 18px;font-size:14px;line-height:1.6' }, steps.map(function(t){ return el('li', null, t); })) : null,
+    kind === 'off' ? el('button', { 'class': 'btn btn-pri btn-block', onclick: function(e){
+      busyBtn(e.currentTarget, true);
+      enablePush().then(function(){ render(); });
+    } }, 'Turn on notifications') : null,
+    kind === 'denied' ? el('button', { 'class': 'btn btn-pri btn-block', onclick: function(){ location.reload(); } }, 'I\u2019ve turned them on') : null,
+    el('button', { 'class': 'btn btn-ghost btn-block', style: 'margin-top:10px', onclick: function(){ confirmDlg('Sign out?', 'You can sign back in any time.', 'Sign out', signOut); } }, 'Sign out')
+  ]);
+  app.appendChild(el('main', { 'class': 'wrap main' }, card));
+}
 function renderWorker(app){
   var w = me();
   if (!w) { signOut(); return; }
+  var gate = pushGateKind();
+  if (gate) { renderPushGate(app, w, gate); return; }
   var items = workerNavItems();
   var hdr = el('div', { 'class': 'hdr' }, el('div', { 'class': 'wrap hdr-in' }, [
     el('div', { 'class': 'brand' }, [ el('span', { 'class': 'brand-mark' }, 'A'), 'Astar Care' ]),
