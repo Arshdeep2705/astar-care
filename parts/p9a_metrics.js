@@ -15,6 +15,7 @@
      intervals are merged before summing, never added. */
 var EV_CALC_VERSION = 'metrics-v3';
 var EV_SLEEP_BLOCK = { from: '23:00', to: '07:00' };
+var EV_SLEEPOVER_ACTIVE_H = 2;               // hours of active support a sleepover shift allows for; the report's reference line
 var EV_BLANK_ZERO_CUTOFF = '2026-09-07';   // structured logs saved before this stored blank answers as 0
 var EV_TRANSFER_LOCS = ['Bed', 'Shower', 'Toilet', 'Couch to wheelchair', 'Wheelchair to bed', 'Vehicle'];  // legacy fallback only
 
@@ -274,11 +275,66 @@ function evBuildDataset(inp){
   incidentList.filter(function(e){ return e.injuries === 'unknown'; }).forEach(function(e){ checks.push({ kind: 'unknown', date: e.date, detail: 'Injury question not answered on this incident; shown as unknown, not as no injury.', ref: e.id }); });
   completed.filter(function(s){ return !noteIds[s.id] && !s.note_waived; }).forEach(function(s){ checks.push({ kind: 'not recorded', date: s.date, detail: (s.type === 'sleepover' ? 'Sleepover' : 'Day shift') + ' ' + s.start_t + '–' + s.end_t + ' has no shift note.', ref: s.id }); });
 
+  /* ---- report profile: the figures the Support Data Summary states (rates, distributions, week rows).
+     Every rate names its denominator; nothing here is estimated or filled in. ---- */
+  var ALLOW = EV_SLEEPOVER_ACTIVE_H;
+  function shiftHours(s){ return (evShiftEnd(s) - evShiftStart(s)) / 3600000; }
+  function hourOf(t){ var m = evTMin(t); return m == null ? null : Math.floor(m / 60) % 24; }
+  function bandOf(t){ var m = evTMin(t); if (m == null) return 'untimed'; return (m >= 23 * 60 || m < 7 * 60) ? 'night' : (m >= 18 * 60 ? 'evening' : 'day'); }
+  function byHour(list){ var h = []; for (var i = 0; i < 24; i++) h.push(0); list.forEach(function(e){ var x = hourOf(e.time); if (x != null) h[x]++; }); return h; }
+  function byBand(list){ var b = { day: 0, evening: 0, night: 0, untimed: 0 }; list.forEach(function(e){ b[bandOf(e.time)]++; }); return b; }
+  function median(a){ if (!a.length) return null; var s = a.slice().sort(function(x, y){ return x - y; }), m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+  function per(n, d, k){ return d ? evRound(n / d * (k || 1), 1) : null; }
+  var serviceDates = {}; completed.forEach(function(s){ serviceDates[s.date] = 1; });
+  var serviceDays = Object.keys(serviceDates).sort();
+  var fallDates = {}; falls.forEach(function(e){ fallDates[e.date] = 1; });
+  var eventDates = {}; falls.forEach(function(e){ eventDates[e.date] = 1; }); nmList.forEach(function(e){ eventDates[e.date] = 1; });
+  var run = 0, longestRun = 0; serviceDays.forEach(function(d){ if (fallDates[d]) run = 0; else { run++; if (run > longestRun) longestRun = run; } });
+  var assistVals = withAssist.map(function(r){ return r.assistHours; });
+  var overRows = withAssist.filter(function(r){ return r.assistHours > ALLOW; });
+  var BANDS = [[0, 1, 'Up to 1 h'], [1, 2, 'Over 1 to 2 h'], [2, 3, 'Over 2 to 3 h'], [3, 4, 'Over 3 to 4 h'], [4, 5, 'Over 4 to 5 h'], [5, 6, 'Over 5 to 6 h'], [6, 99, 'Over 6 h']];
+  var hoursDay = evSum(completed.filter(function(s){ return s.type !== 'sleepover'; }).map(shiftHours)), hoursNight = evSum(nightsInScope.map(shiftHours));
+  function careSum(list, key){ var v = list.filter(function(l){ return l[key] != null; }); return v.length ? evSum(v.map(function(l){ return +l[key]; })) : null; }
+  var padLogs = care.filter(function(l){ return l.pad_wet != null || l.pad_bowel != null; });
+  var padDays = {}; padLogs.forEach(function(l){ padDays[byId[l.shift_id].date] = 1; });
+  var padTotal = evSum(padLogs.map(function(l){ return (+l.pad_wet || 0) + (+l.pad_bowel || 0); }));
+  var wkKeys = []; for (var wk = evMondayOf(from); wk <= to; wk = evAddDays(wk, 7)) wkKeys.push(wk);
+  var profile = {
+    allowance: ALLOW,
+    service: { days: serviceDays.length, first: serviceDays[0] || null, last: serviceDays[serviceDays.length - 1] || null, weeks: evRound(serviceDays.length / 7, 1),
+      hours: evRound(hoursDay + hoursNight, 1), hoursDay: evRound(hoursDay, 1), hoursNight: evRound(hoursNight, 1), hoursPerDay: serviceDays.length ? evRound((hoursDay + hoursNight) / serviceDays.length, 1) : null,
+      dayShifts: completed.length - nightsInScope.length, nightShifts: nightsInScope.length },
+    overnight: { n: withAssist.length, of: inScopeRows.length, mean: overnight.avgAssist.hours, median: evRound(median(assistVals)), min: assistVals.length ? Math.min.apply(null, assistVals) : null, max: assistVals.length ? Math.max.apply(null, assistVals) : null,
+      over: overRows.length, overPct: withAssist.length ? Math.round(overRows.length / withAssist.length * 100) : null,
+      totalHours: evRound(evSum(assistVals), 1), hoursOver: evRound(evSum(overRows.map(function(r){ return r.assistHours - ALLOW; })), 1),
+      meanAsleep: overnight.avgAsleep.hours, wakesMean: overnight.wakes.nights ? evRound(overnight.wakes.n / overnight.wakes.nights, 1) : null, wakesTotal: overnight.wakes.n, wakesNights: overnight.wakes.nights,
+      bands: BANDS.map(function(b, i){ return { label: b[2], over: b[0] >= ALLOW, n: withAssist.filter(function(r){ return i === 0 ? r.assistHours <= b[1] : (r.assistHours > b[0] && r.assistHours <= b[1]); }).length }; }) },
+    falls: { n: falls.length, perWeek: per(falls.length, serviceDays.length, 7), days: Object.keys(fallDates).length, longestFreeRun: longestRun, byHour: byHour(falls), bands: byBand(falls),
+      duringTransfer: incidents.transfers.yes + incidents.transfers.inferred, emergency: falls.filter(function(e){ return e.emergency.length; }).length },
+    nearMisses: { n: nmList.length, perWeek: per(nmList.length, serviceDays.length, 7), days: nearMisses.days, byHour: byHour(nmList), bands: byBand(nmList), duringTransfer: nearMisses.transfers.yes + nearMisses.transfers.inferred },
+    eventDays: Object.keys(eventDates).length,
+    care: { logs: care.length, shifts: completed.length, padTotal: padLogs.length ? padTotal : null, padDays: Object.keys(padDays).length, padPerDay: per(padTotal, Object.keys(padDays).length),
+      padWet: careSum(care, 'pad_wet'), padBowel: careSum(care, 'pad_bowel'), bedWet: careSum(care, 'bed_wet'),
+      transfers: careData.transfers.logged, transferDays: careData.transfers.loggedDays, transfersPerDay: careData.transfers.loggedDays ? evRound(careData.transfers.logged / careData.transfers.loggedDays, 1) : null },
+    weeks: wkKeys.map(function(k){
+      var a = k < from ? from : k, e = evAddDays(k, 6) > to ? to : evAddDays(k, 6);
+      function inWk(d){ return d >= a && d <= e; }
+      var sh = completed.filter(function(s){ return inWk(s.date); }), nr = withAssist.filter(function(r){ return inWk(r.date); }), cl = care.filter(function(l){ return inWk(byId[l.shift_id].date); });
+      var sd = {}; sh.forEach(function(s){ sd[s.date] = 1; });
+      var cd = {}; cl.forEach(function(l){ cd[byId[l.shift_id].date] = 1; });
+      var pw = careSum(cl, 'pad_wet'), pb = careSum(cl, 'pad_bowel'), tr = careSum(cl, 'transfers');
+      return { key: k, from: a, to: e, days: Object.keys(sd).length, shifts: sh.length, hours: evRound(evSum(sh.map(shiftHours)), 1),
+        nights: nr.length, assistMean: nr.length ? evRound(evAvg(nr.map(function(r){ return r.assistHours; }))) : null, nightsOver: nr.filter(function(r){ return r.assistHours > ALLOW; }).length,
+        falls: falls.filter(function(x){ return inWk(x.date); }).length, nearMisses: nmList.filter(function(x){ return inWk(x.date); }).length,
+        pads: (pw == null && pb == null) ? null : (pw || 0) + (pb || 0), bedWet: careSum(cl, 'bed_wet'), transfers: tr, careDays: Object.keys(cd).length };
+    })
+  };
+
   /* ---- frozen source index and record ids (the export renders from these, never from live data) ---- */
   var sourceIndex = (inp.sources || []).filter(function(s){ return s.participant_id === cid && !s.excluded; }).map(function(s, i){ return { n: i + 1, id: s.id, title: s.title || s.file_name || s.kind, kind: s.kind, author: s.author || '', from: s.event_from || '', to: s.event_to || '', sha256: s.sha256 || '', updated_at: s.updated_at || s.created_at || '' }; });
 
   return { version: EV_CALC_VERSION, builtAt: now.toISOString(), client: { id: cid, name: inp.client.name }, from: from, to: to, tz: inp.tz || 'Australia/Melbourne', sleepBlock: EV_SLEEP_BLOCK,
-    coverage: coverage, metrics: metrics, overnight: overnight, incidents: incidents, nearMisses: nearMisses, care: careData, series: series, checks: checks,
+    coverage: coverage, metrics: metrics, overnight: overnight, incidents: incidents, nearMisses: nearMisses, care: careData, series: series, profile: profile, checks: checks,
     sourceIndex: sourceIndex, recordIds: { incidents: incs.map(function(i){ return i.id; }), nearMisses: nms.map(function(n){ return n.id; }), careLogs: care.map(function(l){ return l.id; }), overnightLogs: onl.map(function(l){ return l.id; }), observations: obs.map(function(o){ return o.id; }) },
     definitions: EV_DEFINITIONS };
 }

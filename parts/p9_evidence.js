@@ -291,7 +291,7 @@ function openOvernightModal(opts){
 /* ================= admin: reports — Support Needs Summary ================= */
 /* Chart colours are validated (colour-vision safe, chroma floor, contrast):
    teal = accent series, red = falls / over allowance, amber = near misses, grey = asleep. */
-var RP_C = { acc: '#0f9b8a', bad: '#c92f2f', warn: '#b8860b', dim: '#cfcac0', grid: '#e7e4de', axis: '#8a919b', ink: '#14181d' };
+var RP_C = { acc: '#4a6885', bad: '#1f3a5a', warn: '#a9b8c8', dim: '#cfcac0', grid: '#e7e4de', axis: '#8a919b', ink: '#14181d' };
 
 function rpSec(n, title, lead, kids, cls){
   return el('section', { 'class': 'rp-sec' + (cls ? ' ' + cls : '') }, [

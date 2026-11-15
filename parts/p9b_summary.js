@@ -3,7 +3,7 @@
    Every figure comes from p9a_metrics.js (metrics-v3). Source import, review, checks and report
    versions live behind "Manage data" so the dashboard stays a dashboard. */
 var SUM_PAGE = 1000;
-var SUM_TABS = [['overview', 'Overview'], ['overnight', 'Overnight'], ['incidents', 'Incidents'], ['near', 'Near misses']];
+var SUM_TABS = [['report', 'Report'], ['overview', 'Overview'], ['overnight', 'Overnight'], ['incidents', 'Incidents'], ['near', 'Near misses']];
 
 function sbSelAll(table, query){
   var all = [];
@@ -11,7 +11,7 @@ function sbSelAll(table, query){
   return page(0);
 }
 function sumState(){
-  if (!state.sum) { var y = addDays(todayYmd(), -1); state.sum = { view: 'overview', client: null, from: addDays(y, -27), to: y, preset: '4w', loading: false, loadedKey: null, data: null, ds: null, evidenceTables: null, versions: [], demo: false, obsFilter: 'proposed', err: null, frozen: null, drawer: null, exportOpts: { overnight: true, incidents: true, near: true, appendix: true } }; }
+  if (!state.sum) { var y = addDays(todayYmd(), -1); state.sum = { view: 'report', autoAll: true, client: null, from: addDays(y, -27), to: y, preset: 'all', loading: false, loadedKey: null, data: null, ds: null, evidenceTables: null, versions: [], demo: false, obsFilter: 'proposed', err: null, frozen: null, drawer: null, exportOpts: { overnight: false, incidents: false, near: false, appendix: false } }; }
   return state.sum;
 }
 function sumClient(){
@@ -56,7 +56,15 @@ function sumCompute(){
   ['shifts', 'incidents', 'nearMisses', 'careLogs', 'overnightLogs', 'notes', 'sources', 'observations'].forEach(function(k){ inp[k] = S.data[k] || []; });
   S.ds = evBuildDataset(inp);
 }
-function sumSetPeriod(from, to, preset){ var S = sumState(); S.from = from; S.to = to; S.preset = preset || null; sumLoad(true); }
+function sumSetPeriod(from, to, preset){ var S = sumState(); S.autoAll = false; S.from = from; S.to = to; S.preset = preset || null; sumLoad(true); }
+/* the whole record: from the participant's first rostered shift to yesterday */
+function sumAllPeriod(){
+  var S = sumState(), c = sumClient(), y = addDays(todayYmd(), -1); if (!c) return;
+  S.autoAll = false;
+  if (S.demo) { sumSetPeriod(addDays(y, -90), y, 'all'); return; }
+  S.loading = true; render();
+  sbSel('ac_shifts', 'select=date&client_id=eq.' + c.id + '&order=date.asc&limit=1').then(function(r){ var f = r && r[0] ? r[0].date : addDays(y, -27); sumSetPeriod(f > y ? y : f, y, 'all'); })["catch"](function(){ sumSetPeriod(addDays(y, -27), y, '4w'); });
+}
 
 /* ---------- tiny formatters ---------- */
 function anN(v){ return v == null ? 'Not recorded' : String(v); }
@@ -208,22 +216,24 @@ function viewReports(main){
   var presets = [['7d', '7 days', 6], ['4w', '4 weeks', 27], ['12w', '12 weeks', 83]];
   doc.appendChild(el('div', { 'class': 'an-bar rp-controls' }, [
     el('h1', { 'class': 'an-h1' }, 'Summary'),
-    S.demo ? el('span', { 'class': 'status missing' }, 'Demonstration — synthetic participant') : el('select', { 'class': 'sel an-sel', 'aria-label': 'Participant', onchange: function(e){ S.client = e.target.value; S.data = null; sumLoad(true); } }, state.data.clients.map(function(x){ return el('option', { value: x.id, selected: x.id === S.client }, x.name); })),
+    S.demo ? el('span', { 'class': 'status missing' }, 'Demonstration — synthetic participant') : el('select', { 'class': 'sel an-sel', 'aria-label': 'Participant', onchange: function(e){ S.client = e.target.value; S.data = null; if (S.preset === 'all') sumAllPeriod(); else sumLoad(true); } }, state.data.clients.map(function(x){ return el('option', { value: x.id, selected: x.id === S.client }, x.name); })),
     el('label', { 'class': 'an-lab' }, [ 'From ', el('input', { 'class': 'inp an-date', type: 'date', value: S.from, 'aria-label': 'From date', onchange: function(e){ sumSetPeriod(e.target.value, S.to, null); } }) ]),
     el('label', { 'class': 'an-lab' }, [ 'To ', el('input', { 'class': 'inp an-date', type: 'date', value: S.to, 'aria-label': 'To date', onchange: function(e){ sumSetPeriod(S.from, e.target.value, null); } }) ]),
-    el('div', { 'class': 'seg an-seg', role: 'group', 'aria-label': 'Preset periods' }, presets.map(function(p){ return el('button', { 'class': S.preset === p[0] ? 'on' : '', onclick: function(){ var y = addDays(todayYmd(), -1); sumSetPeriod(addDays(y, -p[2]), y, p[0]); } }, p[1]); })),
+    el('div', { 'class': 'seg an-seg', role: 'group', 'aria-label': 'Preset periods' }, presets.map(function(p){ return el('button', { 'class': S.preset === p[0] ? 'on' : '', onclick: function(){ var y = addDays(todayYmd(), -1); sumSetPeriod(addDays(y, -p[2]), y, p[0]); } }, p[1]); }).concat([el('button', { 'class': S.preset === 'all' ? 'on' : '', onclick: sumAllPeriod }, 'All records')])),
     el('div', { 'class': 'spacer' }),
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: sumOpenManage }, 'Manage data' + (S.ds && S.ds.coverage.records.observationsProposed ? ' (' + S.ds.coverage.records.observationsProposed + ')' : '')),
     el('button', { 'class': 'btn btn-sm btn-sec', onclick: function(){ var d = xpDefaults(); state.exp = Object.assign(state.exp || { type: 'notes', names: true, worker: '' }, { client: d.client, from: d.from, to: d.to }); openExportOptions(); } }, 'Export records'),
     el('button', { 'class': 'btn btn-sm btn-pri', onclick: sumOpenExport }, [svgIcon(IC.file), 'Export summary'])
   ]));
-  if (!S.data && !S.loading && !S.err) sumLoad();
+  if (!S.data && !S.loading && !S.err) { if (S.autoAll) sumAllPeriod(); else sumLoad(); }
   if (S.loading) { doc.appendChild(el('div', { 'class': 'an-cov', role: 'status' }, 'Loading every record for ' + (c ? c.name : '') + ', ' + fmtDate(S.from) + ' to ' + fmtDate(S.to) + '…')); return; }
   if (S.err) { doc.appendChild(el('div', { 'class': 'banner warn' }, [ el('div', null, [ el('b', null, 'Could not load the period'), el('div', { 'class': 't-cap' }, S.err) ]) ])); return; }
   if (!S.ds) return;
   var ds = S.ds;
   doc.appendChild(el('div', { 'class': 'an-cov' }, [ el('b', null, c.name + ' · ' + anShortRange(ds.from, ds.to)), ' · ' + sumCoverageLine(ds), S.evidenceTables === false ? el('span', { 'class': 't-cap' }, ' · imports unavailable (migration 002)') : null ]));
   doc.appendChild(el('div', { 'class': 'seg an-tabs rp-controls', role: 'tablist', 'aria-label': 'Summary views' }, SUM_TABS.map(function(v){ return el('button', { 'class': S.view === v[0] ? 'on' : '', role: 'tab', 'aria-selected': S.view === v[0] ? 'true' : 'false', onclick: function(){ S.view = v[0]; render(); } }, v[1]); })));
+  if (S.view === 'report' && !ds.profile) S.view = 'overview';
+  if (S.view === 'report') { doc.appendChild(srReport(ds, srContext(S.frozen))); return; }
   ({ overview: sumOverview, overnight: sumOvernight, incidents: sumIncidents, near: sumNearMisses })[S.view](doc, ds, c);
 }
 function sumCoverageLine(ds){
@@ -635,8 +645,10 @@ function sumOpenExport(){
   var m = el('div', { 'class': 'modal', style: 'max-width:460px' }, [
     el('div', { 'class': 'modal-head' }, [ el('div', null, [ el('div', { 'class': 't-title' }, 'Export'), el('div', { 'class': 't-cap' }, sumClient().name + ' · ' + fmtDate(S.from) + ' to ' + fmtDate(S.to) + (S.frozen ? ' · finalised version' : ' · live data (draft)')) ]), el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x)) ]),
     el('div', { 'class': 'modal-body' }, [
-      el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Overview is always included. Add detail sections:'),
-      [['overnight', 'Overnight'], ['incidents', 'Incidents'], ['near', 'Near misses'], ['appendix', 'Appendix: sources, record ids and definitions']].map(function(k){ return el('label', { 'class': 'checkrow' }, [ el('input', { type: 'checkbox', checked: !!o[k[0]], onchange: function(e){ o[k[0]] = e.target.checked; } }), el('span', { style: 'font-size:14px' }, k[1]) ]); }),
+      (function(){ var c = sumClient(), mt = srMeta(c); function f(label, key, ph){ return el('div', { 'class': 'field' }, [ el('label', null, label), el('input', { 'class': 'inp', value: mt[key], placeholder: ph || '', oninput: function(e){ mt[key] = e.target.value.trim(); srSaveMeta(c, mt); } }) ]); }
+        return el('div', null, [ el('div', { 'class': 't-label', style: 'margin-bottom:8px' }, 'Shown in the document header and sign-off (kept on this device):'), f('Participant’s full name', 'name', c.name), f('NDIS number', 'ndis'), el('div', { 'class': 'grid2' }, [ f('Prepared by', 'author', sumMe().name), f('Position', 'role', 'e.g. Team Leader') ]) ]); })(),
+      el('div', { 'class': 't-label', style: 'margin:12px 0 8px' }, 'The Support Data Summary is always included. Add appendices:'),
+      [['overnight', 'Night-by-night table'], ['incidents', 'Incident list'], ['near', 'Near miss list'], ['appendix', 'Sources, record ids and definitions']].map(function(k){ return el('label', { 'class': 'checkrow' }, [ el('input', { type: 'checkbox', checked: !!o[k[0]], onchange: function(e){ o[k[0]] = e.target.checked; } }), el('span', { style: 'font-size:14px' }, k[1]) ]); }),
       el('div', { 'class': 'q-help', style: 'margin-top:10px' }, 'Opens the document; use Print / save as PDF. Record exports (full notes, incident forms, logs) are under Export records.'),
       el('button', { 'class': 'btn btn-sm btn-ghost', style: 'margin-top:8px', onclick: function(){ closeModal(); var d = xpDefaults(); state.exp = Object.assign(state.exp || { type: 'notes', names: true, worker: '' }, { client: d.client, from: d.from, to: d.to }); openExportOptions(); } }, 'Export records instead…')
     ]),
@@ -658,20 +670,22 @@ function viewSumDoc(main){
   if (legacy) { doc.appendChild(el('div', { 'class': 'banner warn' }, [ el('div', null, [ el('b', null, 'Legacy version (' + (ds.version || 'unknown') + ')'), el('div', { 'class': 't-cap' }, 'This finalised version was produced by an earlier format and is preserved as it was. Its stored figures are listed below without the current charts.') ]) ])); doc.appendChild(el('pre', { 'class': 'sum-pre' }, JSON.stringify({ coverage: ds.coverage, overnight: ds.overnight && { rostered: ds.overnight.rostered, documented: ds.overnight.documented, avgActive: ds.overnight.avgActive }, safety: ds.safety }, null, 2))); return; }
   var org = state.data.settings.org_name || 'Astar Health Service';
   var who = ver && ver.snapshot && ver.snapshot.reviewer ? ver.snapshot.reviewer : sumMe();
-  doc.appendChild(el('div', { 'class': 'an-doc-head' }, [
+  var modern = !!ds.profile;
+  if (modern) doc.appendChild(srReport(ds, srContext(ver)));
+  if (!modern) doc.appendChild(el('div', { 'class': 'an-doc-head' }, [
     el('div', null, [ el('div', { 'class': 'an-eyebrow' }, org + ' · Recorded support summary' + (S.demo ? ' · DEMONSTRATION (synthetic)' : '')), el('h2', { 'class': 'an-doc-title' }, ds.client.name + ' · ' + fmtDateFull(ds.from) + ' to ' + fmtDateFull(ds.to)) ]),
     el('div', { 'class': 'an-doc-meta' }, [ el('div', null, [ el('b', null, ver ? 'Final' : 'Draft'), ' · ' + (ver ? 'reviewed by ' + (who.name || ver.reviewer) + ' on ' + fmtDateFull((ver.finalised_at || ver.created_at).slice(0, 10)) : 'prepared by ' + who.name + ', not finalised') ]), el('div', null, 'Version ' + (ver ? ver.calc_version : EV_CALC_VERSION + '+' + BUILD_V) + ' · exported ' + fmtDateFull(todayYmd()) + ' · times ' + ds.tz) ])
   ]));
-  doc.appendChild(el('div', { 'class': 'an-cov' }, sumCoverageLine(ds) + ' · ' + ds.coverage.periodDays + ' days'));
-  doc.appendChild(sumMetricsRow(ds));
+  if (!modern) doc.appendChild(el('div', { 'class': 'an-cov' }, sumCoverageLine(ds) + ' · ' + ds.coverage.periodDays + ' days'));
+  if (!modern) doc.appendChild(sumMetricsRow(ds));
   var ov = ds.overnight;
-  doc.appendChild(anSec('Overnight assistance per night', 'Hours of recorded worker assistance inside 23:00–07:00. Hatched = partial, dashed = not recorded.', ov.rows.length ? [ sumNightBars(ds, 170), anCaption('n = ' + ov.avgAssist.n + ' nights with a value of ' + ov.inScope + ' in scope · ' + ov.missing + ' not recorded · average ' + anH(ov.avgAssist.hours)) ] : [ anEmpty('No sleepover shifts in this period.') ]));
-  doc.appendChild(anSec('Falls and near misses over time', 'Recorded events per ' + ds.series.mode + '. No bar = no recorded event.', [ sumSeriesChart(ds, ['falls', 'nearMisses'], [{ label: 'Falls', color: RP_C.bad }, { label: 'Near misses', color: RP_C.warn }], 150), anLegend([{ c: RP_C.bad, l: 'Falls' }, { c: RP_C.warn, l: 'Near misses' }]), anCaption(ds.incidents.falls + ' falls · ' + ds.nearMisses.n + ' near misses · ' + ds.coverage.shifts.completed + ' completed shifts, ' + ds.coverage.shifts.withNote + ' with a note') ]));
+  if (!modern) doc.appendChild(anSec('Overnight assistance per night', 'Hours of recorded worker assistance inside 23:00–07:00. Hatched = partial, dashed = not recorded.', ov.rows.length ? [ sumNightBars(ds, 170), anCaption('n = ' + ov.avgAssist.n + ' nights with a value of ' + ov.inScope + ' in scope · ' + ov.missing + ' not recorded · average ' + anH(ov.avgAssist.hours)) ] : [ anEmpty('No sleepover shifts in this period.') ]));
+  if (!modern) doc.appendChild(anSec('Falls and near misses over time', 'Recorded events per ' + ds.series.mode + '. No bar = no recorded event.', [ sumSeriesChart(ds, ['falls', 'nearMisses'], [{ label: 'Falls', color: RP_C.bad }, { label: 'Near misses', color: RP_C.warn }], 150), anLegend([{ c: RP_C.bad, l: 'Falls' }, { c: RP_C.warn, l: 'Near misses' }]), anCaption(ds.incidents.falls + ' falls · ' + ds.nearMisses.n + ' near misses · ' + ds.coverage.shifts.completed + ' completed shifts, ' + ds.coverage.shifts.withNote + ' with a note') ]));
   var meas = ds.care.measures.filter(function(m){ return m.recorded > 0; });
-  doc.appendChild(anSec('Transfers and personal care', 'Structured counts from the personal care log; totals are over the logs that answered.', ds.care.logs ? [ el('div', { 'class': 'an-grid2' }, [ el('div', null, [ el('div', { 'class': 'an-sub' }, 'Assisted transfers per ' + ds.series.mode), anSeries(ds.series.buckets.map(function(k){ return { label: ds.series.mode === 'day' ? fmtDM(k.key) : 'wk ' + fmtDM(k.key), vals: [k.transfers] }; }), [{ label: 'Assisted transfers', color: RP_C.acc }], { height: 160, width: 460 }), anCaption(ds.metrics.transfers.value == null ? 'Transfers not recorded' : ds.metrics.transfers.value + ' transfers · ' + ds.metrics.transfers.note) ]), el('div', null, [ el('div', { 'class': 'an-sub' }, 'Care measures'), anHBars(meas.map(function(m){ return { label: m.label, n: m.total, note: 'in ' + m.recorded + ' of ' + m.of + ' logs' }; })) ]) ]) ] : [ anEmpty('No personal care logs in this period.') ]));
-  if (o.overnight) doc.appendChild(anSec('Overnight detail', 'One row per night the shift started. Wakes exclude the final wake.', [ sumNightTable(ds), ov.timeline.length ? anTimeline(ov.timeline, ov.rows) : null, ov.byActivity.length ? anHBars(ov.byActivity.map(function(a){ return { label: a.activity, n: a.episodes, note: a.hours != null ? '· ' + hrsFmt(a.hours) + ' h timed' : '' }; })) : null ], { cls: 'an-sec-long an-break' }));
-  if (o.incidents) doc.appendChild(anSec('Incident detail', ds.incidents.n + ' incident report' + (ds.incidents.n === 1 ? '' : 's') + ' · ' + ds.incidents.falls + ' falls · ' + ds.incidents.emergencyInvolved + ' involving an emergency call', ds.incidents.list.length ? [ rpTable([ 'Date · time', 'Type', 'Location', 'Description', 'Response / outcome', 'Emergency' ], ds.incidents.list.map(function(e){ return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), e.types.join(', ') + (e.isFall ? ' · fall' : ''), e.location || '—', (e.description || '').slice(0, 200), [ e.response, e.outcome ].filter(Boolean).join(' · ').slice(0, 200) || '—', e.emergency.join(', ') || '—' ]; })) ] : [ anEmpty('No incident reports.') ], { cls: 'an-sec-long an-break' }));
-  if (o.near) doc.appendChild(anSec('Near miss detail', ds.nearMisses.n + ' recorded · ' + ds.nearMisses.equipment + ' linked to equipment', ds.nearMisses.list.length ? [ rpTable([ 'Date · time', 'Location · activity', 'What nearly happened', 'What prevented it' ], ds.nearMisses.list.map(function(e){ return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), (e.location || '—') + (e.transfer === 'yes' ? ' · during a transfer' : ''), (e.description || '').slice(0, 200), (e.prevented || '—').slice(0, 200) ]; })) ] : [ anEmpty('No near misses.') ], { cls: 'an-sec-long an-break' }));
+  if (!modern) doc.appendChild(anSec('Transfers and personal care', 'Structured counts from the personal care log; totals are over the logs that answered.', ds.care.logs ? [ el('div', { 'class': 'an-grid2' }, [ el('div', null, [ el('div', { 'class': 'an-sub' }, 'Assisted transfers per ' + ds.series.mode), anSeries(ds.series.buckets.map(function(k){ return { label: ds.series.mode === 'day' ? fmtDM(k.key) : 'wk ' + fmtDM(k.key), vals: [k.transfers] }; }), [{ label: 'Assisted transfers', color: RP_C.acc }], { height: 160, width: 460 }), anCaption(ds.metrics.transfers.value == null ? 'Transfers not recorded' : ds.metrics.transfers.value + ' transfers · ' + ds.metrics.transfers.note) ]), el('div', null, [ el('div', { 'class': 'an-sub' }, 'Care measures'), anHBars(meas.map(function(m){ return { label: m.label, n: m.total, note: 'in ' + m.recorded + ' of ' + m.of + ' logs' }; })) ]) ]) ] : [ anEmpty('No personal care logs in this period.') ]));
+  if (o.overnight) doc.appendChild(anSec((modern ? 'Appendix — ' : '') + 'Overnight detail', 'One row per night the shift started. Wakes exclude the final wake.', [ sumNightTable(ds), ov.timeline.length ? anTimeline(ov.timeline, ov.rows) : null, ov.byActivity.length ? anHBars(ov.byActivity.map(function(a){ return { label: a.activity, n: a.episodes, note: a.hours != null ? '· ' + hrsFmt(a.hours) + ' h timed' : '' }; })) : null ], { cls: 'an-sec-long an-break' }));
+  if (o.incidents) doc.appendChild(anSec((modern ? 'Appendix — ' : '') + 'Incident detail', ds.incidents.n + ' incident report' + (ds.incidents.n === 1 ? '' : 's') + ' · ' + ds.incidents.falls + ' falls · ' + ds.incidents.emergencyInvolved + ' involving an emergency call', ds.incidents.list.length ? [ rpTable([ 'Date · time', 'Type', 'Location', 'Description', 'Response / outcome', 'Emergency' ], ds.incidents.list.map(function(e){ return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), e.types.join(', ') + (e.isFall ? ' · fall' : ''), e.location || '—', (e.description || '').slice(0, 200), [ e.response, e.outcome ].filter(Boolean).join(' · ').slice(0, 200) || '—', e.emergency.join(', ') || '—' ]; })) ] : [ anEmpty('No incident reports.') ], { cls: 'an-sec-long an-break' }));
+  if (o.near) doc.appendChild(anSec((modern ? 'Appendix — ' : '') + 'Near miss detail', ds.nearMisses.n + ' recorded · ' + ds.nearMisses.equipment + ' linked to equipment', ds.nearMisses.list.length ? [ rpTable([ 'Date · time', 'Location · activity', 'What nearly happened', 'What prevented it' ], ds.nearMisses.list.map(function(e){ return [ fmtDate(e.date) + (e.time ? ' ' + fmtTime(e.time) : ''), (e.location || '—') + (e.transfer === 'yes' ? ' · during a transfer' : ''), (e.description || '').slice(0, 200), (e.prevented || '—').slice(0, 200) ]; })) ] : [ anEmpty('No near misses.') ], { cls: 'an-sec-long an-break' }));
   if (o.appendix) doc.appendChild(anSec('Appendix: sources, records and definitions', 'The records and sources this document was computed from, as frozen with it.', [
     el('div', { 'class': 'an-sub' }, 'Record ids'), el('div', { 'class': 't-cap' }, 'Incident reports ' + ds.recordIds.incidents.length + ' · near misses ' + ds.recordIds.nearMisses.length + ' · care logs ' + ds.recordIds.careLogs.length + ' · overnight summaries ' + ds.recordIds.overnightLogs.length + ' · accepted observations ' + ds.recordIds.observations.length),
     el('div', { 'class': 't-cap', style: 'overflow-wrap:anywhere' }, [].concat(ds.recordIds.incidents, ds.recordIds.nearMisses, ds.recordIds.careLogs, ds.recordIds.overnightLogs, ds.recordIds.observations).join(', ') || '—'),
@@ -679,5 +693,5 @@ function viewSumDoc(main){
     ds.checks.length ? el('div', null, [ el('div', { 'class': 'an-sub', style: 'margin-top:10px' }, 'Checks recorded with this version'), rpTable([ 'Kind', 'Date', 'Detail' ], ds.checks.map(function(k){ return [ k.kind, k.date ? fmtDate(k.date) : '—', k.detail ]; })) ]) : null,
     el('div', { 'class': 'an-sub', style: 'margin-top:10px' }, 'Definitions (' + ds.version + ')'), rpTable([ 'Term', 'Definition' ], ds.definitions.map(function(r){ return [ r[0], r[1] ]; }))
   ], { cls: 'an-sec-long an-break' }));
-  doc.appendChild(el('div', { 'class': 'rp-foot' }, [ el('span', null, org + ' · Recorded support summary · ' + ds.client.name + ' · ' + fmtDate(ds.from) + ' – ' + fmtDate(ds.to) + ' · ' + (ver ? 'Final' : 'Draft')), el('span', null, '') ]));
+  if (!modern) doc.appendChild(el('div', { 'class': 'rp-foot' }, [ el('span', null, org + ' · Recorded support summary · ' + ds.client.name + ' · ' + fmtDate(ds.from) + ' – ' + fmtDate(ds.to) + ' · ' + (ver ? 'Final' : 'Draft')), el('span', null, '') ]));
 }
