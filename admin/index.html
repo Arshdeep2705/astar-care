@@ -612,7 +612,7 @@ var BUCKET = 'ac-files';   // admin PIN is checked server-side (admin-login func
 var MAX_FILE = 15 * 1024 * 1024;
 /* Which portal is this page? /admin serves the admin portal, everything else the worker portal. */
 var PORTAL = /(^|\/)admin(\/|$)/.test(location.pathname) ? 'admin' : 'worker';
-var BUILD_V = '20261116104144';   // stamped by build.sh; used to auto-reload stale PWAs
+var BUILD_V = '20261116105413';   // stamped by build.sh; used to auto-reload stale PWAs
 var VAPID_PUBLIC = 'BHILHZ1Fyu5QC3AFoqhBVYYWrfgLd6LxmSv813-Zw3xDDiFJHneLuUl5AWz4al3BB0in_NY8_eQfoQa4DXym1hI';
 
 var NOTE_TEMPLATE = [
@@ -6881,11 +6881,7 @@ function srReport(ds, ctx){
         [ 'Overnight summaries', { t: srN(cv.records.overnightLogs), n: true }, srN(o.n) + ' of ' + srPlural(o.of, 'night') ],
         [ 'Incident reports', { t: srN(ds.incidents.n), n: true }, srPlural(f.n, 'fall') + ', ' + srN(ds.incidents.n - f.n) + ' other' ],
         [ 'Near miss records', { t: srN(nm.n), n: true }, srPlural(nm.days, 'day') ]
-      ]) ]),
-    el('div', { 'class': 'sr-sign' }, [
-      el('div', null, [ el('span', null, 'Prepared by'), el('b', null, meta.author || ' ') ]), el('div', null, [ el('span', null, 'Position'), el('b', null, meta.role || ' ') ]),
-      el('div', null, [ el('span', null, 'Signature'), el('b', null, ' ') ]), el('div', null, [ el('span', null, 'Date'), el('b', null, srDate(ctx.issued)) ])
-    ])
+      ]) ])
   ]));
   return sheet;
 }

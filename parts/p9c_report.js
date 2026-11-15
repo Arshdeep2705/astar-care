@@ -234,11 +234,7 @@ function srReport(ds, ctx){
         [ 'Overnight summaries', { t: srN(cv.records.overnightLogs), n: true }, srN(o.n) + ' of ' + srPlural(o.of, 'night') ],
         [ 'Incident reports', { t: srN(ds.incidents.n), n: true }, srPlural(f.n, 'fall') + ', ' + srN(ds.incidents.n - f.n) + ' other' ],
         [ 'Near miss records', { t: srN(nm.n), n: true }, srPlural(nm.days, 'day') ]
-      ]) ]),
-    el('div', { 'class': 'sr-sign' }, [
-      el('div', null, [ el('span', null, 'Prepared by'), el('b', null, meta.author || ' ') ]), el('div', null, [ el('span', null, 'Position'), el('b', null, meta.role || ' ') ]),
-      el('div', null, [ el('span', null, 'Signature'), el('b', null, ' ') ]), el('div', null, [ el('span', null, 'Date'), el('b', null, srDate(ctx.issued)) ])
-    ])
+      ]) ])
   ]));
   return sheet;
 }
