@@ -562,15 +562,19 @@ function openAdminShift(s){
     var kv = el('div', { 'class': 'card', style: 'padding:6px 16px;box-shadow:none;background:var(--paper);border:0' });
     kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Clock in'),
       el('span', { 'class': 'v', style: 'display:flex;align-items:center;gap:6px;justify-content:flex-end' }, [
-        cin ? fmtDT(cin.at) + (cin.distance_m != null ? ' · ' + Math.round(cin.distance_m) + ' m' : '') : '—', clockPinLink(cin), clockEditBtn(cin, 'in') ]) ]));
+        cin ? fmtDT(cin.at) + (cin.distance_m != null ? ' · ' + distFmt(cin.distance_m) : '') : '—', clockPinLink(cin), clockEditBtn(cin, 'in') ]) ]));
     kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Clock out'),
       el('span', { 'class': 'v', style: 'display:flex;align-items:center;gap:6px;justify-content:flex-end' }, [
         cout ? fmtDT(cout.at) + (cout.distance_m != null ? ' · ' + distFmt(cout.distance_m) : '') : '—', clockPinLink(cout), clockEditBtn(cout, 'out') ]) ]));
-    if (cout && cout.offsite) kv.appendChild(el('div', { 'class': 'banner warn', style: 'margin:6px 0 8px;font-size:13.5px' }, [
-      el('div', { style: 'color:var(--warnc);display:flex' }, svgIcon(IC.pin)),
-      el('div', { style: 'flex:1' }, [ el('b', null, 'Off-site clock-out'), ' · ' + (cout.distance_m != null ? distFmt(cout.distance_m) + ' from the address' : 'distance unknown'),
-        cout.offsite_reason ? el('div', { style: 'margin-top:2px' }, '“' + cout.offsite_reason + '”') : null ])
-    ]));
+    [[cin, 'Off-site clock-in'], [cout, 'Off-site clock-out']].forEach(function(p){
+      var rec = p[0];
+      if (!rec || !rec.offsite) return;
+      kv.appendChild(el('div', { 'class': 'banner warn', style: 'margin:6px 0 8px;font-size:13.5px' }, [
+        el('div', { style: 'color:var(--warnc);display:flex' }, svgIcon(IC.pin)),
+        el('div', { style: 'flex:1' }, [ el('b', null, p[1]), ' · ' + (rec.distance_m != null ? distFmt(rec.distance_m) + ' from the address' : 'distance unknown'),
+          rec.offsite_reason ? el('div', { style: 'margin-top:2px' }, '“' + rec.offsite_reason + '”') : null ])
+      ]));
+    });
     if (actual != null) {
       var varc = actual - rostered;
       kv.appendChild(el('div', { 'class': 'kv' }, [ el('span', { 'class': 'k' }, 'Worked'), el('span', { 'class': 'v' }, hrsFmt(actual) + ' h') ]));

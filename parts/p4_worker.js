@@ -348,10 +348,11 @@ function notePreview(body){
 function distFmt(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km'; }
 function mapsUrl(lat, lng){ return 'https://www.google.com/maps?q=' + lat + ',' + lng; }
 
-/* Clock in: must be at the client's address (geofence).
-   Clock out (owner 2026-09-27): only once the shift note is saved, and allowed from
-   anywhere — outside the geofence the worker types where they are / why, and the pin,
-   distance and reason are recorded for the office (pattern from the King Kitchen app). */
+/* Clock in and clock out are both allowed from anywhere. Outside the client's geofence
+   the worker types where they are / why, and the pin, distance and reason are recorded for
+   the office (clock out: owner 2026-09-27, pattern from the King Kitchen app; clock in:
+   owner 2026-11-16, so a worker who has already left with the client can still clock in on
+   time). Clock out still needs the shift note saved first. */
 function clockBtn(s, w, kind){
   var c = clientById(s.client_id);
   var label = kind === 'in' ? 'Clock in' : 'Clock out';
@@ -384,11 +385,7 @@ function clockBtn(s, w, kind){
       var radius = c.radius_m || 200;
       if (d != null && d > radius) {
         reset();
-        if (kind === 'in') {
-          toast("You're " + distFmt(d) + " from " + c.name + "'s address — get within " + radius + " m to clock in.", true);
-          return;
-        }
-        openOffsiteReason(c, d, function(reason, done){ save(pos, d, reason)["catch"](function(e){ done(); toast(e.message, true); }); });
+        openOffsiteReason(c, d, kind, function(reason, done){ save(pos, d, reason)["catch"](function(e){ done(); toast(e.message, true); }); });
         return;
       }
       save(pos, d, null)["catch"](function(e){ reset(); toast(e.message, true); });
@@ -400,21 +397,23 @@ function clockBtn(s, w, kind){
   return btn;
 }
 
-/* "Where are you / why?" — required before an off-site clock-out */
-function openOffsiteReason(c, d, onConfirm){
-  var inp = el('input', { 'class': 'inp', type: 'text', maxlength: '200', placeholder: 'e.g. Finished at the shops, client going home by taxi', autocomplete: 'off' });
-  var ok = el('button', { 'class': 'btn btn-pri btn-block', onclick: go }, 'Confirm clock out');
+/* "Where are you / why?" — required before an off-site clock-in or clock-out */
+function openOffsiteReason(c, d, kind, onConfirm){
+  var word = kind === 'in' ? 'in' : 'out';
+  var inp = el('input', { 'class': 'inp', type: 'text', maxlength: '200', autocomplete: 'off',
+    placeholder: kind === 'in' ? 'e.g. Already out with the client, at Northland' : 'e.g. Finished at the shops, client going home by taxi' });
+  var ok = el('button', { 'class': 'btn btn-pri btn-block', onclick: go }, 'Confirm clock ' + word);
   inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') go(); });
   function go(){
     var r = inp.value.trim();
-    if (!r) { toast('Type where you are or why you are clocking out from here.', true); inp.focus(); return; }
+    if (!r) { toast('Type where you are or why you are clocking ' + word + ' from here.', true); inp.focus(); return; }
     busyBtn(ok, true);
     onConfirm(r, function(){ busyBtn(ok, false); });
   }
   var m = el('div', { 'class': 'modal', style: 'max-width:420px' }, [
     el('div', { 'class': 'sheet-grab' }),
     el('div', { 'class': 'modal-head' }, [
-      el('div', { 'class': 't-title' }, 'Clocking out away from ' + c.name + '’s address'),
+      el('div', { 'class': 't-title' }, 'Clocking ' + word + ' away from ' + c.name + '’s address'),
       el('button', { 'class': 'iconbtn', 'aria-label': 'Close', onclick: closeModal }, svgIcon(IC.x))
     ]),
     el('div', { 'class': 'modal-body' }, [
